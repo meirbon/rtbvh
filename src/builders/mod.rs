@@ -14,8 +14,18 @@ pub trait Builder {
 
 #[derive(Debug)]
 pub enum BVHType {
-    LocallyOrderedClustered,
-    BinnedSAH,
+    LocallyOrderedClustered = 0,
+    BinnedSAH = 1,
+}
+
+impl From<u32> for BVHType {
+    fn from(i: u32) -> Self {
+        match i {
+            0 => BVHType::LocallyOrderedClustered,
+            1 => BVHType::BinnedSAH,
+            _ => BVHType::BinnedSAH,
+        }
+    }
 }
 
 /// Stack for acquiring mutable node references across multiple threads

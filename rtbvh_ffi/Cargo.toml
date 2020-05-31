@@ -1,0 +1,18 @@
+[package]
+name = "rtbvh_ffi"
+version = "0.1.0"
+authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
+edition = "2018"
+build = "build.rs"
+
+[lib]
+name = "rtbvh"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+rtbvh = { path = "../" }
+glam = "0.8"
+
+[build-dependencies]
+cbindgen = "0.14"

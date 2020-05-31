@@ -1,6 +1,3 @@
-#![feature(vec_leak)]
-#![feature(shrink_to)]
-
 pub mod aabb;
 pub mod builders;
 pub mod bvh;
@@ -15,6 +12,3 @@ pub use bvh::*;
 pub use bvh_node::*;
 pub use mbvh_node::*;
 pub use ray::*;
-
-// FFI interface
-mod ffi;

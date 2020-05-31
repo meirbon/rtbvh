@@ -2,7 +2,7 @@ use crate::builders::{AtomicNodeStack, Builder};
 use crate::utils::*;
 use crate::{BVHNode, AABB, BVH};
 use glam::*;
-use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+use std::sync::atomic::AtomicUsize;
 
 #[derive(Debug, Copy, Clone)]
 struct SahBin {
@@ -337,7 +337,6 @@ impl<'a> Builder for BinnedSahBuilder<'a> {
 
         // Build bvh
         task_spawner.run(root_task);
-        nodes.shrink_to(node_count.load(SeqCst));
 
         let mut bvh = BVH {
             nodes,
