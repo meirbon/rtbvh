@@ -5,33 +5,32 @@ use glam::*;
 use rtbvh::aabb::AABB;
 use rtbvh::builders::spatial_sah::SpatialTriangle;
 use rtbvh::bvh;
-use rtbvh::{bvh_node::BVHNode, MBVHNode, BVH, MBVH};
+use rtbvh::{bvh_node::BVHNode, BVH, MBVH};
+use std::sync::Mutex;
 
-static mut MANAGER: StructureManager = StructureManager {
-    structures: Vec::new(),
-    m_structures: Vec::new(),
-};
+static mut MANAGER: Option<StructureManager> = None;
 
 struct StructureManager {
-    structures: Vec<BVH>,
-    m_structures: Vec<MBVH>,
+    structures: Mutex<Vec<BVH>>,
+    m_structures: Mutex<Vec<MBVH>>,
 }
 
 impl Default for StructureManager {
     fn default() -> Self {
         StructureManager {
-            structures: Vec::new(),
-            m_structures: Vec::new(),
+            structures: Mutex::new(Vec::new()),
+            m_structures: Mutex::new(Vec::new()),
         }
     }
 }
 
 impl StructureManager {
     pub fn store(&mut self, bvh: BVH) -> RTBVH {
-        self.structures.push(bvh);
-        let id = self.structures.len() - 1;
+        let mut lock = self.structures.lock().unwrap();
+        lock.push(bvh);
+        let id = lock.len() - 1;
 
-        let bvh: &BVH = &self.structures[id];
+        let bvh: &BVH = &lock[id];
 
         RTBVH {
             id: id as u32,
@@ -43,10 +42,12 @@ impl StructureManager {
     }
 
     pub fn store_mbvh(&mut self, mbvh: MBVH) -> RTMBVH {
-        self.m_structures.push(mbvh);
-        let id = self.m_structures.len() - 1;
+        let mut lock = self.m_structures.lock().unwrap();
 
-        let mbvh: &MBVH = &self.m_structures[id];
+        lock.push(mbvh);
+        let id = lock.len() - 1;
+
+        let mbvh: &MBVH = &lock[id];
 
         RTMBVH {
             id: id as u32,
@@ -57,17 +58,32 @@ impl StructureManager {
         }
     }
 
-    pub fn get(&self, id: u32) -> Option<&BVH> {
-        self.structures.get(id as usize)
+    pub fn get<T, B>(&self, id: u32, mut cb: T) -> Option<B>
+    where
+        T: FnMut(Option<&BVH>) -> B,
+    {
+        if let Ok(lock) = self.structures.lock() {
+            Some(cb(lock.get(id as usize)))
+        } else {
+            None
+        }
     }
 
-    pub fn get_mut(&mut self, id: u32) -> Option<&mut BVH> {
-        self.structures.get_mut(id as usize)
+    pub fn get_mut<T, B>(&self, id: u32, mut cb: T) -> Option<B>
+    where
+        T: FnMut(Option<&mut BVH>) -> B,
+    {
+        if let Ok(mut lock) = self.structures.lock() {
+            Some(cb(lock.get_mut(id as usize)))
+        } else {
+            None
+        }
     }
 
     pub fn free(&mut self, id: u32) -> Result<(), ()> {
-        if let Some(_) = self.structures.get(id as usize) {
-            self.structures[id as usize] = BVH::empty();
+        let mut lock = self.structures.lock().unwrap();
+        if let Some(_) = lock.get(id as usize) {
+            lock[id as usize] = BVH::empty();
             Ok(())
         } else {
             Err(())
@@ -75,8 +91,9 @@ impl StructureManager {
     }
 
     pub fn free_mbvh(&mut self, id: u32) -> Result<(), ()> {
-        if let Some(_) = self.m_structures.get(id as usize) {
-            self.m_structures[id as usize] = MBVH::empty();
+        let mut lock = self.m_structures.lock().unwrap();
+        if let Some(_) = lock.get(id as usize) {
+            lock[id as usize] = MBVH::empty();
             Ok(())
         } else {
             Err(())
@@ -247,6 +264,14 @@ pub extern "C" fn create_spatial_bvh(
     triangle_stride: usize,
 ) -> RTBVH {
     assert_eq!(stride % 4, 0);
+    unsafe {
+        if MANAGER.is_none() {
+            MANAGER = Some(StructureManager {
+                structures: Mutex::new(Vec::new()),
+                m_structures: Mutex::new(Vec::new()),
+            });
+        }
+    }
 
     let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const AABB, prim_count) };
     let triangles: Vec<RTTriangleWrapper> = (0..prim_count)
@@ -282,7 +307,7 @@ pub extern "C" fn create_spatial_bvh(
         bvh::BVH::construct_spatial(aabbs, centers.as_slice(), triangles.as_slice())
     };
 
-    unsafe { MANAGER.store(bvh) }
+    unsafe { MANAGER.as_mut().unwrap().store(bvh) }
 }
 
 #[no_mangle]
@@ -294,6 +319,14 @@ pub extern "C" fn create_bvh(
     bvh_type: BVHType,
 ) -> RTBVH {
     assert_eq!(center_stride % 4, 0);
+    unsafe {
+        if MANAGER.is_none() {
+            MANAGER = Some(StructureManager {
+                structures: Mutex::new(Vec::new()),
+                m_structures: Mutex::new(Vec::new()),
+            });
+        }
+    }
 
     let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const AABB, prim_count) };
 
@@ -321,27 +354,44 @@ pub extern "C" fn create_bvh(
         bvh::BVH::construct(aabbs, centers.as_slice(), bvh_type.into())
     };
 
-    unsafe { MANAGER.store(bvh) }
+    unsafe { MANAGER.as_mut().unwrap().store(bvh) }
 }
 
 #[no_mangle]
 pub extern "C" fn create_mbvh(bvh: RTBVH) -> RTMBVH {
-    let bvh: &BVH = unsafe { MANAGER.get(bvh.id).unwrap() };
-    let mbvh: MBVH = MBVH::construct(bvh);
-
-    unsafe { MANAGER.store_mbvh(mbvh) }
+    unsafe {
+        MANAGER
+            .as_mut()
+            .unwrap()
+            .get(bvh.id, |bvh| {
+                let mbvh = MBVH::construct(bvh.unwrap());
+                MANAGER.as_mut().unwrap().store_mbvh(mbvh)
+            })
+            .unwrap()
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn refit(aabbs: *const RTAABB, bvh: RTBVH) {
-    let bvh: &mut BVH = unsafe { MANAGER.get_mut(bvh.id).unwrap() };
-    bvh.refit(unsafe { std::slice::from_raw_parts(aabbs as *const AABB, bvh.prim_count()) });
+    unsafe {
+        MANAGER
+            .as_mut()
+            .unwrap()
+            .get_mut(bvh.id, |bvh| {
+                let bvh = bvh.unwrap();
+                bvh.refit(std::slice::from_raw_parts(
+                    aabbs as *const AABB,
+                    bvh.prim_count(),
+                ));
+            })
+            .unwrap();
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn free_bvh(bvh: RTBVH) {
     unsafe {
-        if let Err(_) = MANAGER.free(bvh.id) {
+        if let Err(_) = MANAGER.as_mut().unwrap().free(bvh.id) {
             println!("Could not free bvh with id: {}", bvh.id);
         }
     }
@@ -350,7 +400,7 @@ pub extern "C" fn free_bvh(bvh: RTBVH) {
 #[no_mangle]
 pub extern "C" fn free_mbvh(bvh: RTMBVH) {
     unsafe {
-        if let Err(_) = MANAGER.free_mbvh(bvh.id) {
+        if let Err(_) = MANAGER.as_mut().unwrap().free_mbvh(bvh.id) {
             println!("Could not free bvh with id: {}", bvh.id);
         }
     }
