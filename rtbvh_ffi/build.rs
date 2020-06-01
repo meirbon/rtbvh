@@ -20,6 +20,7 @@ fn main() {
     let config = cbindgen::Config {
         namespace: Some(String::from("rtbvh")),
         language: cbindgen::Language::C,
+        include_guard: Some(String::from("RTBVH_H")),
         ..Default::default()
     };
     cbindgen::generate_with_config(&crate_dir, config)
@@ -35,6 +36,7 @@ fn main() {
     let config = cbindgen::Config {
         namespace: Some(String::from("rtbvh")),
         language: cbindgen::Language::Cxx,
+        include_guard: Some(String::from("RTBVH_HPP")),
         ..Default::default()
     };
 
