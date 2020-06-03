@@ -65,9 +65,9 @@ impl RayPacket4 {
 
     pub fn direction_xyz(&self) -> (Vec4, Vec4, Vec4) {
         (
-            Vec4::from(self.origin_x),
-            Vec4::from(self.origin_y),
-            Vec4::from(self.origin_z),
+            Vec4::from(self.direction_x),
+            Vec4::from(self.direction_y),
+            Vec4::from(self.direction_z),
         )
     }
 
