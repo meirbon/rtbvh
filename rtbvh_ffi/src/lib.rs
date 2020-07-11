@@ -1,6 +1,3 @@
-#![feature(vec_leak)]
-#![feature(shrink_to)]
-
 use glam::*;
 use rtbvh::aabb::AABB;
 use rtbvh::builders::spatial_sah::SpatialTriangle;
@@ -112,7 +109,7 @@ impl Into<rtbvh::builders::BVHType> for BVHType {
         match self {
             BVHType::LocallyOrderedClustered => rtbvh::builders::BVHType::LocallyOrderedClustered,
             BVHType::BinnedSAH => rtbvh::builders::BVHType::BinnedSAH,
-            _ => rtbvh::builders::BVHType::BinnedSAH,
+            // _ => rtbvh::builders::BVHType::BinnedSAH,
         }
     }
 }
