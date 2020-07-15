@@ -1,7 +1,8 @@
-use crate::utils::*;
 #[allow(dead_code)]
-use crate::*;
+use crate::{utils::*, *};
 use glam::*;
+
+#[cfg(not(feature = "wasm_support"))]
 use rayon::prelude::*;
 
 /// Split an unsigned integer such that its bits are spaced by 2 zeros.
@@ -64,12 +65,29 @@ impl MortonEncoder {
         let prim_count = aabbs.len();
 
         let mut indices: Vec<u32> = (0..(prim_count as u32)).collect();
+
+        #[cfg(not(feature = "wasm_support"))]
         let morton_codes: Vec<u32> = (0..prim_count)
             .into_par_iter()
             .map(|i| self.encode(centers[i]))
             .collect();
 
+        #[cfg(feature = "wasm_support")]
+        let morton_codes: Vec<u32> = (0..prim_count)
+            .into_iter()
+            .map(|i| self.encode(centers[i]))
+            .collect();
+
+        #[cfg(not(feature = "wasm_support"))]
         indices.par_sort_by(|a, b| {
+            let a = (*a) as usize;
+            let b = (*b) as usize;
+
+            morton_codes[a].cmp(&morton_codes[b])
+        });
+
+        #[cfg(feature = "wasm_support")]
+        indices.sort_by(|a, b| {
             let a = (*a) as usize;
             let b = (*b) as usize;
 

@@ -806,6 +806,19 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> Builder for SpatialSahBuilder
         let node_count = AtomicUsize::new(1);
         let (node_stack, first_node) = AtomicNodeStack::new(&node_count, nodes.as_mut_slice());
 
+        #[cfg(feature = "wasm_support")]
+        references.iter().for_each(|r| {
+            r.as_mut()[0..prim_count]
+                .iter_mut()
+                .enumerate()
+                .for_each(|(i, sref)| {
+                    sref.aabb = self.aabbs[i];
+                    sref.center = self.centers[i];
+                    sref.prim_id = i as u32;
+                });
+        });
+
+        #[cfg(not(feature = "wasm_support"))]
         references.iter().par_bridge().for_each(|r| {
             r.as_mut()[0..prim_count]
                 .iter_mut()
@@ -841,8 +854,21 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> Builder for SpatialSahBuilder
             spatial_threshold,
         );
 
+        #[cfg(feature = "wasm_support")]
+        {
+            let mut stack = vec![root_task];
+            while let Some(task) = stack.pop() {
+                if let Some(left_task, right_task) = task.run() {
+                    stack.push(left);
+                    stack.push(right);
+                }
+            }
+        }
+
         // Launch build task
+        #[cfg(not(feature = "wasm_support"))]
         task_spawner.run(root_task);
+
         nodes.resize(node_count.load(SeqCst), BVHNode::new());
 
         // Compose bvh

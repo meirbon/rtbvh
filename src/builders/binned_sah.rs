@@ -335,7 +335,19 @@ impl<'a> Builder for BinnedSahBuilder<'a> {
             0,
         );
 
+        #[cfg(feature = "wasm_support")]
+        {
+            let mut stack = vec![root_task];
+            while let Some(task) = stack.pop() {
+                if let Some(left_task, right_task) = task.run() {
+                    stack.push(left);
+                    stack.push(right);
+                }
+            }
+        }
+
         // Build bvh
+        #[cfg(not(feature = "wasm_support"))]
         task_spawner.run(root_task);
 
         let mut bvh = BVH {

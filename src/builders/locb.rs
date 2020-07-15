@@ -140,6 +140,18 @@ impl<'a> LocallyOrderedClusteringBuilder<'a> {
 
         // Mark nodes that are the closest as merged, but keep
         // the one with lowest index to act as the parent
+        #[cfg(feature = "wasm_support")]
+        merged_index[begin..end]
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, m)| {
+                let i = begin + i;
+                let j = neighbours[i] as usize;
+                let is_mergeable = (neighbours[j] as usize) == i;
+                *m = if i < j && is_mergeable { 1 } else { 0 };
+            });
+
+        #[cfg(not(feature = "wasm_support"))]
         merged_index[begin..end]
             .par_iter_mut()
             .enumerate()
@@ -174,6 +186,31 @@ impl<'a> LocallyOrderedClusteringBuilder<'a> {
         let neighbours: &[u32] = neighbours;
         let merged_index: &[u32] = merged_index;
 
+        #[cfg(not(feature = "wasm_support"))]
+        (begin..end).into_iter().for_each(|i| {
+            let j = neighbours[i] as usize;
+            if neighbours[j] as usize == i {
+                if i < j {
+                    let unmerged_node = par_output
+                        .get_mut(unmerged_begin + j - begin - merged_index[j] as usize)
+                        .unwrap();
+                    let first_child = children_begin + (merged_index[i] as usize - 1) * 2;
+                    unmerged_node.bounds = input[j].bounds.union_of(&input[i].bounds);
+                    unmerged_node.count = -1;
+                    unmerged_node.left_first = first_child as i32;
+
+                    par_output.set(first_child + 0, input[i].clone());
+                    par_output.set(first_child + 1, input[j].clone());
+                }
+            } else {
+                par_output.set(
+                    unmerged_begin + i - begin - (merged_index[i] as usize),
+                    input[i].clone(),
+                );
+            }
+        });
+
+        #[cfg(feature = "wasm_support")]
         (begin..end).into_par_iter().for_each(|i| {
             let j = neighbours[i] as usize;
             if neighbours[j] as usize == i {

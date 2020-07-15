@@ -1,11 +1,13 @@
 use num::*;
-use rayon::prelude::*;
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 use std::{
     ops::Range,
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+#[cfg(not(feature = "wasm_support"))]
+use rayon::prelude::*;
 
 pub fn round_up_log2(bits: u32, mut offset: u32) -> u32 {
     if bits == 0 {
@@ -21,6 +23,13 @@ pub fn round_up_log2(bits: u32, mut offset: u32) -> u32 {
 
 #[allow(dead_code)]
 pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &[u32]) -> Vec<T> {
+    #[cfg(feature = "wasm_support")]
+    (0..indices.len())
+        .into_iter()
+        .map(|i| primitives[indices[i] as usize].clone())
+        .collect()
+
+    #[cfg(not(feature = "wasm_support"))]
     (0..indices.len())
         .into_par_iter()
         .map(|i| primitives[indices[i] as usize].clone())
