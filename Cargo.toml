@@ -1,6 +1,6 @@
 [package]
 name = "rtbvh"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -20,4 +20,5 @@ num = "0.2"
 wasm-bindgen = { version = "0.2", optional = true }
 
 [features]
+default = []
 wasm_support = ["wasm-bindgen"]
