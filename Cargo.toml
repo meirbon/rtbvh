@@ -3,6 +3,12 @@ name = "rtbvh"
 version = "0.1.0"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
+license = "Apache-2.0"
+repository = "https://github.com/meirbon/rtbvh"
+description = "BVH library written in Rust."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 crossbeam = "0.7.3"
@@ -11,3 +17,7 @@ num_cpus = "1.13"
 rayon = "1.3.0"
 serde = { version = "1.0", features = ["derive"] }
 num = "0.2"
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+wasm_support = ["wasm-bindgen"]

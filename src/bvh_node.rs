@@ -151,7 +151,7 @@ impl BVHNode {
         let mut stack_ptr: i32 = 0;
 
         while stack_ptr >= 0 {
-            #[cfg(any(target_arch = "x86_64"))]
+            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -212,7 +212,7 @@ impl BVHNode {
 
         let dir_inverse = Vec3::one() / dir;
         while stack_ptr >= 0 {
-            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -270,7 +270,7 @@ impl BVHNode {
         let dir_inverse = Vec3::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
-            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -330,7 +330,7 @@ impl BVHNode {
         let dir_inverse = Vec3::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
-            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -453,7 +453,7 @@ impl BVHNode {
         let inv_dir_z = one / Vec4::from(packet.direction_z);
 
         while stack_ptr >= 0 {
-            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,

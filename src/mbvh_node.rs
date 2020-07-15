@@ -63,7 +63,10 @@ impl MBVHNode {
     }
 
     pub fn points(&self) -> (Vec4, Vec4, Vec4, Vec4, Vec4, Vec4) {
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        #[cfg(all(
+            any(target_arch = "x86_64", target_arch = "x86"),
+            not(feature = "wasm_support")
+        ))]
         {
             (
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.min_x.as_ptr()) }),
@@ -74,7 +77,10 @@ impl MBVHNode {
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.max_z.as_ptr()) }),
             )
         }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+        #[cfg(any(
+            not(any(target_arch = "x86_64", target_arch = "x86")),
+            feature = "wasm_support"
+        ))]
         {
             (
                 Vec4::from(self.min_x),
@@ -88,7 +94,10 @@ impl MBVHNode {
     }
 
     pub fn min_points(&self) -> (Vec4, Vec4, Vec4) {
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        #[cfg(all(
+            any(target_arch = "x86_64", target_arch = "x86"),
+            not(feature = "wasm_support")
+        ))]
         {
             (
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.min_x.as_ptr()) }),
@@ -96,7 +105,10 @@ impl MBVHNode {
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.min_z.as_ptr()) }),
             )
         }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+        #[cfg(any(
+            not(any(target_arch = "x86_64", target_arch = "x86")),
+            feature = "wasm_support"
+        ))]
         {
             (
                 Vec4::from(self.min_x),
@@ -107,7 +119,10 @@ impl MBVHNode {
     }
 
     pub fn max_points(&self) -> (Vec4, Vec4, Vec4) {
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        #[cfg(all(
+            any(target_arch = "x86_64", target_arch = "x86"),
+            not(feature = "wasm_support")
+        ))]
         {
             (
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.max_x.as_ptr()) }),
@@ -115,7 +130,10 @@ impl MBVHNode {
                 Vec4::from(unsafe { core::arch::x86_64::_mm_load_ps(self.max_z.as_ptr()) }),
             )
         }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+        #[cfg(any(
+            not(any(target_arch = "x86_64", target_arch = "x86")),
+            feature = "wasm_support"
+        ))]
         {
             (
                 Vec4::from(self.max_x),
@@ -293,6 +311,10 @@ impl MBVHNode {
         while stack_ptr >= 0 {
             let left_first = todo[stack_ptr as usize] as usize;
 
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -324,6 +346,10 @@ impl MBVHNode {
                             let stack_ptr = stack_ptr as usize;
                             todo[stack_ptr] = left_first as u32;
 
+                            #[cfg(all(
+                                any(target_arch = "x86_64", target_arch = "x86"),
+                                not(feature = "wasm_support")
+                            ))]
                             unsafe {
                                 core::arch::x86_64::_mm_prefetch(
                                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -360,6 +386,10 @@ impl MBVHNode {
         while stack_ptr >= 0 {
             let left_first = todo[stack_ptr as usize] as usize;
 
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -420,6 +450,10 @@ impl MBVHNode {
         while stack_ptr >= 0 {
             let left_first = todo[stack_ptr as usize] as usize;
 
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -477,6 +511,10 @@ impl MBVHNode {
         while stack_ptr >= 0 {
             let left_first = todo[stack_ptr as usize] as usize;
 
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -534,6 +572,10 @@ impl MBVHNode {
         while stack_ptr >= 0 {
             let left_first = todo[stack_ptr as usize] as usize;
 
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(left_first as usize) as *const i8,
@@ -560,6 +602,10 @@ impl MBVHNode {
                             stack_ptr += 1;
                             todo[stack_ptr as usize] = left_first as u32;
 
+                            #[cfg(all(
+                                any(target_arch = "x86_64", target_arch = "x86"),
+                                not(feature = "wasm_support")
+                            ))]
                             unsafe {
                                 core::arch::x86_64::_mm_prefetch(
                                     tree.as_ptr().add(left_first as usize) as *const i8,
