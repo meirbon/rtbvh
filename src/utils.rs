@@ -22,14 +22,18 @@ pub fn round_up_log2(bits: u32, mut offset: u32) -> u32 {
 }
 
 #[allow(dead_code)]
+#[cfg(feature = "wasm_support")]
 pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &[u32]) -> Vec<T> {
-    #[cfg(feature = "wasm_support")]
     (0..indices.len())
         .into_iter()
         .map(|i| primitives[indices[i] as usize].clone())
         .collect()
 
-    #[cfg(not(feature = "wasm_support"))]
+}
+
+#[allow(dead_code)]
+#[cfg(not(feature = "wasm_support"))]
+pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &[u32]) -> Vec<T> {
     (0..indices.len())
         .into_par_iter()
         .map(|i| primitives[indices[i] as usize].clone())
