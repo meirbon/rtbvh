@@ -60,7 +60,7 @@ impl BVHNode {
     }
 
     #[inline(always)]
-    pub fn intersect(&self, origin: Vec3, dir_inverse: Vec3, t: f32) -> Option<(f32, f32)> {
+    pub fn intersect(&self, origin: Vec3A, dir_inverse: Vec3A, t: f32) -> Option<(f32, f32)> {
         if self.is_valid() {
             self.bounds.intersect(origin, dir_inverse, t)
         } else {
@@ -130,8 +130,8 @@ impl BVHNode {
     pub fn depth_test<I>(
         tree: &[BVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         depth_test: I,
@@ -140,7 +140,7 @@ impl BVHNode {
         I: Fn(usize, f32, f32) -> Option<(f32, u32)>,
     {
         let mut t = t_max;
-        let dir_inverse = Vec3::new(1.0, 1.0, 1.0) / dir;
+        let dir_inverse = Vec3A::new(1.0, 1.0, 1.0) / dir;
 
         if tree[0].intersect(origin, dir_inverse, t).is_none() {
             return (t_max, 0);
@@ -195,8 +195,8 @@ impl BVHNode {
     pub fn traverse<I, R>(
         tree: &[BVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -210,7 +210,7 @@ impl BVHNode {
         let mut t = t_max;
         let mut hit_record = None;
 
-        let dir_inverse = Vec3::one() / dir;
+        let dir_inverse = Vec3A::one() / dir;
         while stack_ptr >= 0 {
             #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
             unsafe {
@@ -254,8 +254,8 @@ impl BVHNode {
     pub fn traverse_t<I>(
         tree: &[BVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -267,7 +267,7 @@ impl BVHNode {
         let mut stack_ptr: i32 = 0;
         let mut t = t_max;
 
-        let dir_inverse = Vec3::new(1.0, 1.0, 1.0) / dir;
+        let dir_inverse = Vec3A::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
             #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
@@ -315,8 +315,8 @@ impl BVHNode {
     pub fn occludes<I>(
         tree: &[BVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -327,7 +327,7 @@ impl BVHNode {
         let mut hit_stack = [0; 64];
         let mut stack_ptr: i32 = 0;
 
-        let dir_inverse = Vec3::new(1.0, 1.0, 1.0) / dir;
+        let dir_inverse = Vec3A::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
             #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]

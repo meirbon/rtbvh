@@ -25,8 +25,8 @@ pub fn morton_split(int: u32) -> u32 {
 }
 
 pub struct MortonEncoder {
-    world_to_grid: Vec3,
-    grid_offset: Vec3,
+    world_to_grid: Vec3A,
+    grid_offset: Vec3A,
     grid_dim: usize,
 }
 
@@ -35,8 +35,8 @@ impl MortonEncoder {
 
     pub fn new(aabb: &AABB, grid_dim: usize) -> MortonEncoder {
         debug_assert!(grid_dim <= Self::MAX_GRID_DIM);
-        let world_to_grid = grid_dim as f32 * aabb.diagonal().reciprocal();
-        let grid_offset = -Vec3::from(aabb.min) * world_to_grid;
+        let world_to_grid = grid_dim as f32 * aabb.diagonal::<Vec3A>().reciprocal();
+        let grid_offset = -Vec3A::from(aabb.min) * world_to_grid;
 
         Self {
             world_to_grid,
@@ -49,7 +49,7 @@ impl MortonEncoder {
         morton_split(x) | (morton_split(y) << 1) | (morton_split(z) << 2)
     }
 
-    pub fn encode(&self, point: Vec3) -> u32 {
+    pub fn encode(&self, point: Vec3A) -> u32 {
         let grid_pos = point * self.world_to_grid + self.grid_offset;
         let min = (self.grid_dim - 1) as i32;
 
@@ -60,7 +60,7 @@ impl MortonEncoder {
         Self::morton_encode(x, y, z)
     }
 
-    pub fn get_sorted_indices(&self, aabbs: &[AABB], centers: &[Vec3]) -> (Vec<u32>, Vec<u32>) {
+    pub fn get_sorted_indices(&self, aabbs: &[AABB], centers: &[Vec3A]) -> (Vec<u32>, Vec<u32>) {
         debug_assert_eq!(aabbs.len(), centers.len());
         let prim_count = aabbs.len();
 

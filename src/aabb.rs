@@ -27,8 +27,8 @@ impl Default for AABB {
 
 impl Display for AABB {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let min = Vec3::from(self.min);
-        let max = Vec3::from(self.max);
+        let min = Vec3A::from(self.min);
+        let max = Vec3A::from(self.max);
 
         write!(
             f,
@@ -66,14 +66,14 @@ impl AABB {
         }
     }
 
-    pub fn intersect(&self, origin: Vec3, dir_inverse: Vec3, t: f32) -> Option<(f32, f32)> {
-        let (min, max) = self.points();
+    pub fn intersect(&self, origin: Vec3A, dir_inverse: Vec3A, t: f32) -> Option<(f32, f32)> {
+        let (min, max) = self.points::<Vec3A>();
 
         let t1 = (min - origin) * dir_inverse;
         let t2 = (max - origin) * dir_inverse;
 
-        let t_min: Vec3 = t1.min(t2);
-        let t_max: Vec3 = t1.max(t2);
+        let t_min: Vec3A = t1.min(t2);
+        let t_max: Vec3A = t1.max(t2);
 
         let t_min = t_min.max_element();
         let t_max = t_max.min_element();
@@ -92,7 +92,7 @@ impl AABB {
         inv_dir_y: Vec4,
         inv_dir_z: Vec4,
     ) -> Option<[f32; 4]> {
-        let (org_x, org_y, org_z) = packet.origin_xyz();
+        let (org_x, org_y, org_z) = packet.origin_xyz::<Vec4>();
 
         let t1_x = (Vec4::splat(self.min[0]) - org_x) * inv_dir_x;
         let t1_y = (Vec4::splat(self.min[1]) - org_y) * inv_dir_y;
@@ -122,13 +122,15 @@ impl AABB {
         }
     }
 
-    pub fn contains(&self, pos: Vec3) -> bool {
-        let (min, max) = self.points();
+    pub fn contains<T: Into<[f32; 3]>>(&self, pos: T) -> bool {
+        let pos: Vec3A = Vec3A::from(pos.into());
+        let (min, max) = self.points::<Vec3A>();
         (pos.cmpgt(min) & pos.cmplt(max)).all()
     }
 
-    pub fn grow(&mut self, pos: Vec3) {
-        let (min, max) = self.points();
+    pub fn grow<T: Into<[f32; 3]>>(&mut self, pos: T) {
+        let pos: Vec3A = Vec3A::from(pos.into());
+        let (min, max) = self.points::<Vec3A>();
         let min = min.min(pos);
         let max = max.max(pos);
 
@@ -139,8 +141,8 @@ impl AABB {
     }
 
     pub fn grow_bb(&mut self, aabb: &AABB) {
-        let (min, max) = self.points();
-        let (a_min, a_max) = aabb.points();
+        let (min, max) = self.points::<Vec3A>();
+        let (a_min, a_max) = aabb.points::<Vec3A>();
 
         let min = min.min(a_min);
         let max = max.max(a_max);
@@ -150,8 +152,8 @@ impl AABB {
     }
 
     pub fn shrink(&mut self, aabb: &AABB) {
-        let (min, max) = self.points();
-        let (a_min, a_max) = aabb.points();
+        let (min, max) = self.points::<Vec3A>();
+        let (a_min, a_max) = aabb.points::<Vec3A>();
 
         let min = min.max(a_min);
         let max = max.min(a_max);
@@ -161,8 +163,8 @@ impl AABB {
     }
 
     pub fn offset_by(&mut self, delta: f32) {
-        let delta = Vec3::splat(delta);
-        let (min, max) = self.points();
+        let delta = Vec3A::splat(delta);
+        let (min, max) = self.points::<Vec3A>();
 
         let min = min - delta;
         let max = max + delta;
@@ -172,11 +174,11 @@ impl AABB {
     }
 
     pub fn union_of(&self, bb: &AABB) -> AABB {
-        let (min, max) = self.points();
-        let (b_min, b_max) = bb.points();
+        let (min, max) = self.points::<Vec3A>();
+        let (b_min, b_max) = bb.points::<Vec3A>();
 
-        let new_min = Vec3::from(min).min(Vec3::from(b_min));
-        let new_max = Vec3::from(max).max(Vec3::from(b_max));
+        let new_min = Vec3A::from(min).min(Vec3A::from(b_min));
+        let new_max = Vec3A::from(max).max(Vec3A::from(b_max));
 
         AABB {
             min: new_min.into(),
@@ -185,11 +187,11 @@ impl AABB {
     }
 
     pub fn intersection(&self, bb: &AABB) -> AABB {
-        let (min, max) = self.points();
-        let (b_min, b_max) = bb.points();
+        let (min, max) = self.points::<Vec3A>();
+        let (b_min, b_max) = bb.points::<Vec3A>();
 
-        let new_min = Vec3::from(min).max(Vec3::from(b_min));
-        let new_max = Vec3::from(max).min(Vec3::from(b_max));
+        let new_min = Vec3A::from(min).max(Vec3A::from(b_min));
+        let new_max = Vec3A::from(max).min(Vec3A::from(b_max));
 
         AABB {
             min: new_min.into(),
@@ -198,29 +200,29 @@ impl AABB {
     }
 
     pub fn volume(&self) -> f32 {
-        let length = Vec3::from(self.max) - Vec3::from(self.min);
+        let length = Vec3A::from(self.max) - Vec3A::from(self.min);
         return length.x() * length.y() * length.z();
     }
 
-    pub fn center(&self) -> Vec3 {
-        (Vec3::from(self.min) + Vec3::from(self.max)) * 0.5
+    pub fn center<T: From<[f32; 3]>>(&self) -> T {
+        T::from(((Vec3A::from(self.min) + Vec3A::from(self.max)) * 0.5).into())
     }
 
     pub fn area(&self) -> f32 {
-        let e = Vec3::from(self.max) - Vec3::from(self.min);
+        let e = Vec3A::from(self.max) - Vec3A::from(self.min);
         let value: f32 = e.x() * e.y() + e.x() * e.z() + e.y() * e.z();
 
         0.0_f32.max(value)
     }
 
     pub fn half_area(&self) -> f32 {
-        let d = self.diagonal();
+        let d = self.diagonal::<Vec3A>();
         (d[0] + d[1]) * d[2] + d[0] * d[1]
     }
 
-    pub fn lengths(&self) -> Vec3 {
-        let (min, max) = self.points();
-        max - min
+    pub fn lengths<T: From<[f32; 3]>>(&self) -> T {
+        let (min, max) = self.points::<Vec3A>();
+        T::from((max - min).into())
     }
 
     pub fn longest_axis(&self) -> usize {
@@ -234,12 +236,12 @@ impl AABB {
         a
     }
 
-    pub fn all_corners(&self) -> [Vec3; 8] {
-        let lengths: Vec3 = self.lengths();
+    pub fn all_corners(&self) -> [Vec3A; 8] {
+        let lengths: Vec3A = self.lengths();
 
-        let x_l = Vec3::new(lengths.x(), 0.0, 0.0);
-        let y_l = Vec3::new(0.0, lengths.y(), 0.0);
-        let z_l = Vec3::new(0.0, 0.0, lengths.z());
+        let x_l = Vec3A::new(lengths.x(), 0.0, 0.0);
+        let y_l = Vec3A::new(0.0, lengths.y(), 0.0);
+        let z_l = Vec3A::new(0.0, 0.0, lengths.z());
 
         let (min, max) = self.points();
 
@@ -259,7 +261,7 @@ impl AABB {
         self.max[axis] - self.min[axis]
     }
 
-    pub fn from_points(points: &[Vec3]) -> AABB {
+    pub fn from_points(points: &[Vec3A]) -> AABB {
         let mut aabb = AABB::empty();
         for point in points {
             aabb.grow(*point);
@@ -268,19 +270,20 @@ impl AABB {
         aabb
     }
 
-    pub fn transformed(&self, transform: Mat4) -> AABB {
-        let mut corners: [Vec3; 8] = self.all_corners();
+    pub fn transformed<T: Into<[f32; 16]>>(&self, transform: T) -> AABB {
+        let transform: Mat4 = Mat4::from_cols_array(&transform.into());
+        let mut corners: [Vec3A; 8] = self.all_corners();
         for i in 0..8 {
             corners[i] = (transform * corners[i].extend(1.0)).truncate()
         }
         AABB::from_points(&corners)
     }
 
-    pub fn points(&self) -> (Vec3, Vec3) {
+    pub fn points<T: From<[f32; 3]>>(&self) -> (T, T) {
         (self.min.into(), self.max.into())
     }
 
-    pub fn transform(&mut self, transform: Mat4) {
+    pub fn transform<T: Into<[f32; 16]>>(&mut self, transform: T) {
         let transformed = self.transformed(transform);
         *self = AABB {
             min: transformed.min,
@@ -289,13 +292,13 @@ impl AABB {
         }
     }
 
-    pub fn diagonal(&self) -> Vec3 {
-        let (min, max) = self.points();
-        max - min
+    pub fn diagonal<T: From<[f32; 3]>>(&self) -> T {
+        let (min, max) = self.points::<Vec3A>();
+        T::from((max - min).into())
     }
 
     pub fn longest_extent(&self) -> f32 {
-        self.diagonal()[self.longest_axis()]
+        self.diagonal::<Vec3A>()[self.longest_axis()]
     }
 
     pub fn union_of_list(aabbs: &[AABB]) -> AABB {
@@ -307,7 +310,7 @@ impl AABB {
     }
 }
 
-impl Into<AABB> for (Vec3, Vec3) {
+impl<T: Into<[f32; 3]>> Into<AABB> for (T, T) {
     fn into(self) -> AABB {
         AABB {
             min: self.0.into(),
@@ -316,9 +319,9 @@ impl Into<AABB> for (Vec3, Vec3) {
     }
 }
 
-impl Into<(Vec3, Vec3)> for AABB {
-    fn into(self) -> (Vec3, Vec3) {
-        self.points()
+impl<T: From<[f32; 3]>> Into<(T, T)> for AABB {
+    fn into(self) -> (T, T) {
+        (T::from(self.min), T::from(self.max))
     }
 }
 

@@ -7,13 +7,13 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub fn get_vectors(&self) -> (Vec3, Vec3) {
+    pub fn get_vectors<T: From<[f32; 3]>>(&self) -> (T, T) {
         (self.origin.into(), self.direction.into())
     }
 }
 
-impl From<(Vec3, Vec3)> for Ray {
-    fn from(vectors: (Vec3, Vec3)) -> Self {
+impl<T: Into<[f32; 3]>> From<(T, T)> for Ray {
+    fn from(vectors: (T, T)) -> Self {
         Ray {
             origin: vectors.0.into(),
             direction: vectors.1.into(),
@@ -21,8 +21,8 @@ impl From<(Vec3, Vec3)> for Ray {
     }
 }
 
-impl Into<(Vec3, Vec3)> for Ray {
-    fn into(self) -> (Vec3, Vec3) {
+impl<T: From<[f32; 3]>> Into<(T, T)> for Ray {
+    fn into(self) -> (T, T) {
         (self.origin.into(), self.direction.into())
     }
 }
@@ -55,19 +55,19 @@ impl RayPacket4 {
         }
     }
 
-    pub fn origin_xyz(&self) -> (Vec4, Vec4, Vec4) {
+    pub fn origin_xyz<T: From<[f32; 4]>>(&self) -> (T, T, T) {
         (
-            Vec4::from(self.origin_x),
-            Vec4::from(self.origin_y),
-            Vec4::from(self.origin_z),
+            T::from(self.origin_x),
+            T::from(self.origin_y),
+            T::from(self.origin_z),
         )
     }
 
-    pub fn direction_xyz(&self) -> (Vec4, Vec4, Vec4) {
+    pub fn direction_xyz<T: From<[f32; 4]>>(&self) -> (T, T, T) {
         (
-            Vec4::from(self.direction_x),
-            Vec4::from(self.direction_y),
-            Vec4::from(self.direction_z),
+            T::from(self.direction_x),
+            T::from(self.direction_y),
+            T::from(self.direction_z),
         )
     }
 
@@ -112,12 +112,12 @@ impl Ray {
     }
 
     pub fn reflect(&self, p: &[f32; 3], n: &[f32; 3], epsilon: f32) -> Ray {
-        let p = Vec3::from(*p);
-        let n = Vec3::from(*n);
+        let p = Vec3A::from(*p);
+        let n = Vec3A::from(*n);
 
-        let direction = Vec3::from(self.direction);
+        let direction = Vec3A::from(self.direction);
 
-        let tmp: Vec3 = n * n.dot(direction) * 2.0;
+        let tmp: Vec3A = n * n.dot(direction) * 2.0;
         let direction = direction - tmp;
 
         Ray {
@@ -126,7 +126,7 @@ impl Ray {
         }
     }
 
-    pub fn get_point_at(&self, t: f32) -> Vec3 {
-        Vec3::from(self.origin) + Vec3::from(self.direction) * t
+    pub fn get_point_at(&self, t: f32) -> Vec3A {
+        Vec3A::from(self.origin) + Vec3A::from(self.direction) * t
     }
 }

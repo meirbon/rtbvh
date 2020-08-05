@@ -28,7 +28,7 @@ impl BVH {
         self.prim_indices.len()
     }
 
-    pub fn construct(aabbs: &[AABB], centers: &[Vec3], build_type: BVHType) -> Self {
+    pub fn construct(aabbs: &[AABB], centers: &[Vec3A], build_type: BVHType) -> Self {
         match build_type {
             BVHType::LocallyOrderedClustered => {
                 let builder = locb::LocallyOrderedClusteringBuilder::new(aabbs, centers);
@@ -41,7 +41,7 @@ impl BVH {
         }
     }
 
-    pub fn construct_spatial<T>(aabbs: &[AABB], centers: &[Vec3], triangles: &[T]) -> Self
+    pub fn construct_spatial<T>(aabbs: &[AABB], centers: &[Vec3A], triangles: &[T]) -> Self
     where
         T: Sized + SpatialTriangle + Send + Sync,
     {
@@ -102,8 +102,8 @@ impl BVH {
         BVHNode::traverse(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -127,8 +127,8 @@ impl BVH {
         BVHNode::traverse_t(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -153,8 +153,8 @@ impl BVH {
         BVHNode::occludes(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -178,8 +178,8 @@ impl BVH {
         BVHNode::depth_test(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -352,8 +352,8 @@ impl MBVH {
         MBVHNode::traverse(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -377,8 +377,8 @@ impl MBVH {
         MBVHNode::traverse_t(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -403,8 +403,8 @@ impl MBVH {
         MBVHNode::occludes(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             intersection_test,
@@ -428,8 +428,8 @@ impl MBVH {
         MBVHNode::depth_test(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
-            Vec3::from(*origin),
-            Vec3::from(*direction),
+            Vec3A::from(*origin),
+            Vec3A::from(*direction),
             t_min,
             t_max,
             depth_test,

@@ -159,7 +159,7 @@ impl MBVHNode {
     }
 
     #[inline(always)]
-    fn intersect(&self, origin: Vec3, inv_direction: Vec3, t: f32) -> Option<MBVHHit> {
+    fn intersect(&self, origin: Vec3A, inv_direction: Vec3A, t: f32) -> Option<MBVHHit> {
         let origin_x: Vec4 = Vec4::splat(origin.x());
         let origin_y: Vec4 = Vec4::splat(origin.y());
         let origin_z: Vec4 = Vec4::splat(origin.z());
@@ -292,8 +292,8 @@ impl MBVHNode {
     pub fn traverse<I, R>(
         tree: &[MBVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -304,7 +304,7 @@ impl MBVHNode {
     {
         let mut todo = [0; 64];
         let mut stack_ptr = 0;
-        let dir_inverse = Vec3::one() / dir;
+        let dir_inverse = Vec3A::one() / dir;
         let mut t = t_max;
         let mut hit_record = None;
 
@@ -369,8 +369,8 @@ impl MBVHNode {
     pub fn traverse_t<I>(
         tree: &[MBVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -380,7 +380,7 @@ impl MBVHNode {
     {
         let mut todo = [0; 64];
         let mut stack_ptr = -1;
-        let dir_inverse = Vec3::one() / dir;
+        let dir_inverse = Vec3A::one() / dir;
         let mut t = t_max;
 
         while stack_ptr >= 0 {
@@ -433,8 +433,8 @@ impl MBVHNode {
     pub fn occludes<I>(
         tree: &[MBVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         mut intersection_test: I,
@@ -444,7 +444,7 @@ impl MBVHNode {
     {
         let mut todo = [0; 64];
         let mut stack_ptr = -1;
-        let dir_inverse = Vec3::one() / dir;
+        let dir_inverse = Vec3A::one() / dir;
         let t = t_max;
 
         while stack_ptr >= 0 {
@@ -493,8 +493,8 @@ impl MBVHNode {
     pub fn depth_test<I>(
         tree: &[MBVHNode],
         prim_indices: &[u32],
-        origin: Vec3,
-        dir: Vec3,
+        origin: Vec3A,
+        dir: Vec3A,
         t_min: f32,
         t_max: f32,
         depth_test: I,
@@ -504,7 +504,7 @@ impl MBVHNode {
     {
         let mut todo = [0; 64];
         let mut stack_ptr: i32 = 0;
-        let dir_inverse = Vec3::one() / dir;
+        let dir_inverse = Vec3A::one() / dir;
         let mut t = t_max;
         let mut depth: u32 = 0;
 

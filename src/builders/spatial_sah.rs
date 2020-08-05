@@ -57,7 +57,7 @@ impl Default for SpatialSplit {
 #[derive(Debug, Copy, Clone)]
 struct SpatialReference {
     aabb: AABB,
-    center: Vec3,
+    center: Vec3A,
     prim_id: u32,
 }
 
@@ -65,16 +65,16 @@ impl Default for SpatialReference {
     fn default() -> Self {
         Self {
             aabb: AABB::empty(),
-            center: Vec3::zero(),
+            center: Vec3A::zero(),
             prim_id: 0,
         }
     }
 }
 
 pub trait SpatialTriangle {
-    fn vertex0(&self) -> Vec3;
-    fn vertex1(&self) -> Vec3;
-    fn vertex2(&self) -> Vec3;
+    fn vertex0(&self) -> Vec3A;
+    fn vertex1(&self) -> Vec3A;
+    fn vertex2(&self) -> Vec3A;
 
     fn split(&self, axis: usize, position: f32) -> (AABB, AABB) {
         let p = [self.vertex0(), self.vertex1(), self.vertex2()];
@@ -82,8 +82,8 @@ pub trait SpatialTriangle {
         let mut left = AABB::empty();
         let mut right = AABB::empty();
 
-        let split_edge = |a: Vec3, b: Vec3| -> Vec3 {
-            let t = (Vec3::splat(position) - Vec3::splat(a[axis])) / Vec3::splat(b[axis] - a[axis]);
+        let split_edge = |a: Vec3A, b: Vec3A| -> Vec3A {
+            let t = (Vec3A::splat(position) - Vec3A::splat(a[axis])) / Vec3A::splat(b[axis] - a[axis]);
             a * t * (b - a)
         };
 
@@ -91,7 +91,7 @@ pub trait SpatialTriangle {
         let q1 = p[1][axis] <= position;
         let q2 = p[2][axis] <= position;
 
-        let mut grow_if = |q: bool, pos: Vec3| {
+        let mut grow_if = |q: bool, pos: Vec3A| {
             if q {
                 left.grow(pos);
             } else {
@@ -702,7 +702,7 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> Task for SpatialSahBuildTask<
 
 pub struct SpatialSahBuilder<'a, T: Sized + SpatialTriangle + Send + Sync> {
     aabbs: &'a [AABB],
-    centers: &'a [Vec3],
+    centers: &'a [Vec3A],
     triangles: &'a [T],
 
     binning_pass_count: usize,
@@ -716,7 +716,7 @@ pub struct SpatialSahBuilder<'a, T: Sized + SpatialTriangle + Send + Sync> {
 }
 
 impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3], triangles: &'a [T]) -> Self {
+    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3A], triangles: &'a [T]) -> Self {
         debug_assert_eq!(aabbs.len(), centers.len());
         debug_assert_eq!(aabbs.len(), triangles.len());
 

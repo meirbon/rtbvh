@@ -215,17 +215,17 @@ unsafe impl Send for RTTriangleWrapper {}
 unsafe impl Sync for RTTriangleWrapper {}
 
 impl SpatialTriangle for RTTriangleWrapper {
-    fn vertex0(&self) -> Vec3 {
+    fn vertex0(&self) -> Vec3A {
         unsafe {
             let ptr = self.vertices.add(self.vertex0_offset as usize);
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3::new(x, y, z)
+            Vec3A::new(x, y, z)
         }
     }
 
-    fn vertex1(&self) -> Vec3 {
+    fn vertex1(&self) -> Vec3A {
         unsafe {
             let ptr = self
                 .vertices
@@ -233,11 +233,11 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3::new(x, y, z)
+            Vec3A::new(x, y, z)
         }
     }
 
-    fn vertex2(&self) -> Vec3 {
+    fn vertex2(&self) -> Vec3A {
         unsafe {
             let ptr = self
                 .vertices
@@ -245,7 +245,7 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3::new(x, y, z)
+            Vec3A::new(x, y, z)
         }
     }
 }
@@ -281,13 +281,13 @@ pub extern "C" fn create_spatial_bvh(
         .collect();
 
     let bvh = if stride == 16 {
-        let centers: &[Vec3] =
-            unsafe { std::slice::from_raw_parts(centers as *const Vec3, prim_count) };
+        let centers: &[Vec3A] =
+            unsafe { std::slice::from_raw_parts(centers as *const Vec3A, prim_count) };
         bvh::BVH::construct_spatial(aabbs, centers, triangles.as_slice())
     } else {
         let data = unsafe { std::slice::from_raw_parts(centers, prim_count * stride / 4) };
         let offset = stride / 4;
-        let centers: Vec<Vec3> = (0..prim_count)
+        let centers: Vec<Vec3A> = (0..prim_count)
             .into_iter()
             .map(|i| {
                 let ix = i * offset;
@@ -298,7 +298,7 @@ pub extern "C" fn create_spatial_bvh(
                 let y = data[iy];
                 let z = data[iz];
 
-                Vec3::new(x, y, z)
+                Vec3A::new(x, y, z)
             })
             .collect();
         bvh::BVH::construct_spatial(aabbs, centers.as_slice(), triangles.as_slice())
@@ -328,13 +328,13 @@ pub extern "C" fn create_bvh(
     let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const AABB, prim_count) };
 
     let bvh = if center_stride == 16 {
-        let centers: &[Vec3] =
-            unsafe { std::slice::from_raw_parts(centers as *const Vec3, prim_count) };
+        let centers: &[Vec3A] =
+            unsafe { std::slice::from_raw_parts(centers as *const Vec3A, prim_count) };
         bvh::BVH::construct(aabbs, centers, bvh_type.into())
     } else {
         let data = unsafe { std::slice::from_raw_parts(centers, prim_count * center_stride / 4) };
         let offset = center_stride / 4;
-        let centers: Vec<Vec3> = (0..prim_count)
+        let centers: Vec<Vec3A> = (0..prim_count)
             .into_iter()
             .map(|i| {
                 let ix = i * offset;
@@ -345,7 +345,7 @@ pub extern "C" fn create_bvh(
                 let y = data[iy];
                 let z = data[iz];
 
-                Vec3::new(x, y, z)
+                Vec3A::new(x, y, z)
             })
             .collect();
         bvh::BVH::construct(aabbs, centers.as_slice(), bvh_type.into())
@@ -424,25 +424,25 @@ mod tests {
 
     #[test]
     fn create_delete() {
-        let mut vertices: Vec<Vec3> = Vec::with_capacity(81);
+        let mut vertices: Vec<Vec3A> = Vec::with_capacity(81);
 
         // 27 Triangles
         for x in 0..=9 {
             for y in 0..=9 {
-                vertices.push(Vec3::new(x as f32, y as f32, 0 as f32));
+                vertices.push(Vec3A::new(x as f32, y as f32, 0 as f32));
             }
         }
 
         let aabbs: Vec<AABB> = (0..27)
             .map(|i| {
-                let v0: Vec3 = vertices[i * 3 + 0];
-                let v1: Vec3 = vertices[i * 3 + 1];
-                let v2: Vec3 = vertices[i * 3 + 2];
+                let v0: Vec3A = vertices[i * 3 + 0];
+                let v1: Vec3A = vertices[i * 3 + 1];
+                let v2: Vec3A = vertices[i * 3 + 2];
                 aabb!(v0, v1, v2)
             })
             .collect();
 
-        let centers: Vec<Vec3> = aabbs.iter().map(|bb| bb.center()).collect();
+        let centers: Vec<Vec3A> = aabbs.iter().map(|bb| bb.center()).collect();
 
         let bvh = create_bvh(
             aabbs.as_ptr() as *const RTAABB,

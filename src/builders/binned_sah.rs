@@ -122,10 +122,10 @@ impl<'a> Task for BinnedSahBuildTask<'a> {
         }
 
         let bin_count = self.builder.bin_count;
-        let center_to_bin = (Vec3::one() / self.node.bounds.diagonal()) * bin_count as f32;
-        let bin_offset: Vec3 = -Vec3::from(self.node.bounds.min) * center_to_bin;
+        let center_to_bin = (Vec3A::one() / self.node.bounds.diagonal::<Vec3A>()) * bin_count as f32;
+        let bin_offset: Vec3A = -Vec3A::from(self.node.bounds.min) * center_to_bin;
 
-        let compute_bin_index = |center: Vec3, axis: usize| -> usize {
+        let compute_bin_index = |center: Vec3A, axis: usize| -> usize {
             let bin_index = center[axis] * center_to_bin[axis] + bin_offset[axis];
             (bin_count - 1).min(bin_index.max(0.0) as usize)
         };
@@ -268,7 +268,7 @@ impl<'a> Task for BinnedSahBuildTask<'a> {
 
 pub struct BinnedSahBuilder<'a> {
     aabbs: &'a [AABB],
-    centers: &'a [Vec3],
+    centers: &'a [Vec3A],
     max_depth: usize,
     bin_count: usize,
     max_leaf_size: usize,
@@ -276,7 +276,7 @@ pub struct BinnedSahBuilder<'a> {
 }
 
 impl<'a> BinnedSahBuilder<'a> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3]) -> Self {
+    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3A]) -> Self {
         debug_assert_eq!(aabbs.len(), centers.len());
         Self {
             aabbs,

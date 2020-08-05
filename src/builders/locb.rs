@@ -2,19 +2,19 @@ use crate::builders::*;
 use crate::morton::*;
 use crate::utils::{prefix_sum, UnsafeSliceWrapper};
 use crate::*;
-use glam::Vec3;
+use glam::Vec3A;
 use rayon::prelude::*;
 
 pub struct LocallyOrderedClusteringBuilder<'a> {
     aabbs: &'a [AABB],
-    centers: &'a [Vec3],
+    centers: &'a [Vec3A],
     encoder: MortonEncoder,
     world_bounds: AABB,
     search_radius: usize,
 }
 
 impl<'a> LocallyOrderedClusteringBuilder<'a> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3]) -> Self {
+    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3A]) -> Self {
         let world_bounds = AABB::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
@@ -265,7 +265,7 @@ impl<'a> Builder for LocallyOrderedClusteringBuilder<'a> {
 
         let mut nodes = vec![
             BVHNode {
-                bounds: (Vec3::zero(), Vec3::zero()).into(),
+                bounds: (Vec3A::zero(), Vec3A::zero()).into(),
                 count: -1,
                 left_first: 0,
             };
