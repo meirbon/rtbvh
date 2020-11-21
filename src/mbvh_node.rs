@@ -160,13 +160,13 @@ impl MBVHNode {
 
     #[inline(always)]
     fn intersect(&self, origin: Vec3A, inv_direction: Vec3A, t: f32) -> Option<MBVHHit> {
-        let origin_x: Vec4 = Vec4::splat(origin.x());
-        let origin_y: Vec4 = Vec4::splat(origin.y());
-        let origin_z: Vec4 = Vec4::splat(origin.z());
+        let origin_x: Vec4 = Vec4::splat(origin.x);
+        let origin_y: Vec4 = Vec4::splat(origin.y);
+        let origin_z: Vec4 = Vec4::splat(origin.z);
 
-        let inv_dir_x: Vec4 = Vec4::splat(inv_direction.x());
-        let inv_dir_y: Vec4 = Vec4::splat(inv_direction.y());
-        let inv_dir_z: Vec4 = Vec4::splat(inv_direction.z());
+        let inv_dir_x: Vec4 = Vec4::splat(inv_direction.x);
+        let inv_dir_y: Vec4 = Vec4::splat(inv_direction.y);
+        let inv_dir_z: Vec4 = Vec4::splat(inv_direction.z);
 
         let (min_x, max_x, min_y, max_y, min_z, max_z) = self.points();
 
@@ -177,12 +177,12 @@ impl MBVHNode {
         let tz0: Vec4 = (min_z - origin_z) * inv_dir_z;
         let tz1: Vec4 = (max_z - origin_z) * inv_dir_z;
 
-        let tx_min = tx0.min(tx1);
-        let tx_max = tx0.max(tx1);
-        let ty_min = ty0.min(ty1);
-        let ty_max = ty0.max(ty1);
-        let tz_min = tz0.min(tz1);
-        let tz_max = tz0.max(tz1);
+        let tx_min: Vec4 = tx0.min(tx1);
+        let tx_max: Vec4 = tx0.max(tx1);
+        let ty_min: Vec4 = ty0.min(ty1);
+        let ty_max: Vec4 = ty0.max(ty1);
+        let tz_min: Vec4 = tz0.min(tz1);
+        let tz_max: Vec4 = tz0.max(tz1);
 
         let mut t_min = tx_min.max(ty_min.max(tz_min));
         let t_max = tx_max.min(ty_max.min(tz_max));

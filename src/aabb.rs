@@ -33,12 +33,12 @@ impl Display for AABB {
         write!(
             f,
             "(min: ({}, {}, {}), max: ({}, {}, {}))",
-            min.x(),
-            min.y(),
-            min.z(),
-            max.x(),
-            max.y(),
-            max.z(),
+            min.x,
+            min.y,
+            min.z,
+            max.x,
+            max.y,
+            max.z,
         )
     }
 }
@@ -201,7 +201,7 @@ impl AABB {
 
     pub fn volume(&self) -> f32 {
         let length = Vec3A::from(self.max) - Vec3A::from(self.min);
-        return length.x() * length.y() * length.z();
+        return length.x * length.y * length.z;
     }
 
     pub fn center<T: From<[f32; 3]>>(&self) -> T {
@@ -210,7 +210,7 @@ impl AABB {
 
     pub fn area(&self) -> f32 {
         let e = Vec3A::from(self.max) - Vec3A::from(self.min);
-        let value: f32 = e.x() * e.y() + e.x() * e.z() + e.y() * e.z();
+        let value: f32 = e.x * e.y + e.x * e.z + e.y * e.z;
 
         0.0_f32.max(value)
     }
@@ -239,9 +239,9 @@ impl AABB {
     pub fn all_corners(&self) -> [Vec3A; 8] {
         let lengths: Vec3A = self.lengths();
 
-        let x_l = Vec3A::new(lengths.x(), 0.0, 0.0);
-        let y_l = Vec3A::new(0.0, lengths.y(), 0.0);
-        let z_l = Vec3A::new(0.0, 0.0, lengths.z());
+        let x_l = Vec3A::new(lengths.x, 0.0, 0.0);
+        let y_l = Vec3A::new(0.0, lengths.y, 0.0);
+        let z_l = Vec3A::new(0.0, 0.0, lengths.z);
 
         let (min, max) = self.points();
 
@@ -274,7 +274,8 @@ impl AABB {
         let transform: Mat4 = Mat4::from_cols_array(&transform.into());
         let mut corners: [Vec3A; 8] = self.all_corners();
         for i in 0..8 {
-            corners[i] = (transform * corners[i].extend(1.0)).truncate()
+            let corner: Vec4 = transform * corners[i].extend(1.0);
+            corners[i] = Vec3A::new(corner.x, corner.y, corner.z);
         }
         AABB::from_points(&corners)
     }
