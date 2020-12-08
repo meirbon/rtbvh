@@ -72,18 +72,23 @@ impl Default for SpatialReference {
 }
 
 pub trait SpatialTriangle {
-    fn vertex0(&self) -> Vec3A;
-    fn vertex1(&self) -> Vec3A;
-    fn vertex2(&self) -> Vec3A;
+    fn vertex0(&self) -> [f32; 3];
+    fn vertex1(&self) -> [f32; 3];
+    fn vertex2(&self) -> [f32; 3];
 
     fn split(&self, axis: usize, position: f32) -> (AABB, AABB) {
-        let p = [self.vertex0(), self.vertex1(), self.vertex2()];
+        let p = [
+            Vec3A::from(self.vertex0()),
+            Vec3A::from(self.vertex1()),
+            Vec3A::from(self.vertex2()),
+        ];
 
         let mut left = AABB::empty();
         let mut right = AABB::empty();
 
         let split_edge = |a: Vec3A, b: Vec3A| -> Vec3A {
-            let t = (Vec3A::splat(position) - Vec3A::splat(a[axis])) / Vec3A::splat(b[axis] - a[axis]);
+            let t =
+                (Vec3A::splat(position) - Vec3A::splat(a[axis])) / Vec3A::splat(b[axis] - a[axis]);
             a * t * (b - a)
         };
 

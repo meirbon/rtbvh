@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 crossbeam = "0.8"
-glam = "0.10"
+glam = "0.11"
 num_cpus = "1.13"
 rayon = "1.5.0"
 serde = { version = "1.0", features = ["derive"] }

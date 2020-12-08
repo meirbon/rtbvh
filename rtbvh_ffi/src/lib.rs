@@ -215,17 +215,17 @@ unsafe impl Send for RTTriangleWrapper {}
 unsafe impl Sync for RTTriangleWrapper {}
 
 impl SpatialTriangle for RTTriangleWrapper {
-    fn vertex0(&self) -> Vec3A {
+    fn vertex0(&self) -> [f32; 3] {
         unsafe {
             let ptr = self.vertices.add(self.vertex0_offset as usize);
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3A::new(x, y, z)
+            [x, y, z]
         }
     }
 
-    fn vertex1(&self) -> Vec3A {
+    fn vertex1(&self) -> [f32; 3] {
         unsafe {
             let ptr = self
                 .vertices
@@ -233,11 +233,11 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3A::new(x, y, z)
+            [x, y, z]
         }
     }
 
-    fn vertex2(&self) -> Vec3A {
+    fn vertex2(&self) -> [f32; 3] {
         unsafe {
             let ptr = self
                 .vertices
@@ -245,7 +245,7 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            Vec3A::new(x, y, z)
+            [x, y, z]
         }
     }
 }

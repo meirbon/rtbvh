@@ -89,8 +89,8 @@ impl RayPacket4 {
         Ray { origin, direction }
     }
 
-    pub fn t(&self) -> Vec4 {
-        Vec4::from(self.t)
+    pub fn t<T: From<[f32; 4]>>(&self) -> T {
+        T::from(self.t)
     }
 }
 
@@ -126,7 +126,11 @@ impl Ray {
         }
     }
 
-    pub fn get_point_at(&self, t: f32) -> Vec3A {
-        Vec3A::from(self.origin) + Vec3A::from(self.direction) * t
+    pub fn get_point_at(&self, t: f32) -> [f32; 3] {
+        let mut point = self.origin;
+        for i in 0..3 {
+            point[i] += self.direction[i] * t;
+        }
+        point
     }
 }
