@@ -1,8 +1,8 @@
 use glam::*;
-use rtbvh::aabb::AABB;
-use rtbvh::builders::spatial_sah::SpatialTriangle;
-use rtbvh::bvh;
-use rtbvh::{bvh_node::BVHNode, BVH, MBVH};
+use rtbvh::{
+    aabb::AABB, builders::spatial_sah::SpatialTriangle, bvh, bvh_node::BVHNode, Builder, Primitive,
+    BVH, MBVH,
+};
 use std::sync::Mutex;
 
 static mut MANAGER: Option<StructureManager> = None;
@@ -31,10 +31,10 @@ impl StructureManager {
 
         RTBVH {
             id: id as u32,
-            node_count: bvh.nodes.len() as u32,
-            nodes: bvh.nodes.as_ptr() as *const RTBVHNode,
-            index_count: bvh.prim_indices.len() as u32,
-            indices: bvh.prim_indices.as_ptr(),
+            node_count: bvh.nodes().len() as u32,
+            nodes: bvh.nodes().as_ptr() as *const RTBVHNode,
+            index_count: bvh.indices().len() as u32,
+            indices: bvh.indices().as_ptr(),
         }
     }
 
@@ -48,10 +48,10 @@ impl StructureManager {
 
         RTMBVH {
             id: id as u32,
-            node_count: mbvh.m_nodes.len() as u32,
-            nodes: mbvh.m_nodes.as_ptr() as *const RTMBVHNode,
-            index_count: mbvh.prim_indices.len() as u32,
-            indices: mbvh.prim_indices.as_ptr(),
+            node_count: mbvh.quad_nodes().len() as u32,
+            nodes: mbvh.quad_nodes().as_ptr() as *const RTMBVHNode,
+            index_count: mbvh.indices().len() as u32,
+            indices: mbvh.indices().as_ptr(),
         }
     }
 
@@ -80,7 +80,7 @@ impl StructureManager {
     pub fn free(&mut self, id: u32) -> Result<(), ()> {
         let mut lock = self.structures.lock().unwrap();
         if let Some(_) = lock.get(id as usize) {
-            lock[id as usize] = BVH::empty();
+            lock[id as usize] = BVH::default();
             Ok(())
         } else {
             Err(())
@@ -90,7 +90,7 @@ impl StructureManager {
     pub fn free_mbvh(&mut self, id: u32) -> Result<(), ()> {
         let mut lock = self.m_structures.lock().unwrap();
         if let Some(_) = lock.get(id as usize) {
-            lock[id as usize] = MBVH::empty();
+            lock[id as usize] = MBVH::default();
             Ok(())
         } else {
             Err(())
@@ -204,11 +204,28 @@ pub struct RTMBVH {
     indices: *const u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct RTTriangleWrapper {
+    centers: *const f32,
+    center_stride: u32,
+    center_i: u32,
     vertices: *const f32,
     vertex0_offset: u32,
     vertex_stride: u32,
+}
+
+impl Primitive for RTTriangleWrapper {
+    fn center(&self) -> [f32; 3] {
+        unsafe {
+            let ptr = self
+                .centers
+                .add((self.center_i * self.center_stride / 4) as usize);
+            let x = *ptr.as_ref().unwrap();
+            let y = *ptr.add(1).as_ref().unwrap();
+            let z = *ptr.add(2).as_ref().unwrap();
+            [x, y, z]
+        }
+    }
 }
 
 unsafe impl Send for RTTriangleWrapper {}
@@ -271,40 +288,44 @@ pub extern "C" fn create_spatial_bvh(
     }
 
     let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const AABB, prim_count) };
-    let triangles: Vec<RTTriangleWrapper> = (0..prim_count)
+    let primitives: Vec<RTTriangleWrapper> = (0..prim_count)
         .into_iter()
         .map(|i| RTTriangleWrapper {
             vertices,
+            centers,
+            center_stride: stride as u32,
+            center_i: i as u32,
             vertex0_offset: (i * triangle_stride / 4) as u32,
             vertex_stride: (vertex_stride / 4) as u32,
         })
         .collect();
-
-    let bvh = if stride == 16 {
-        let centers: &[Vec3A] =
-            unsafe { std::slice::from_raw_parts(centers as *const Vec3A, prim_count) };
-        bvh::BVH::construct_spatial(aabbs, centers, triangles.as_slice())
-    } else {
-        let data = unsafe { std::slice::from_raw_parts(centers, prim_count * stride / 4) };
-        let offset = stride / 4;
-        let centers: Vec<Vec3A> = (0..prim_count)
-            .into_iter()
-            .map(|i| {
-                let ix = i * offset;
-                let iy = ix + 1;
-                let iz = ix + 2;
-
-                let x = data[ix];
-                let y = data[iy];
-                let z = data[iz];
-
-                Vec3A::new(x, y, z)
-            })
-            .collect();
-        bvh::BVH::construct_spatial(aabbs, centers.as_slice(), triangles.as_slice())
+    let builder = Builder {
+        aabbs,
+        primitives: primitives.as_slice(),
     };
+    let bvh = builder.construct_spatial_sah();
 
     unsafe { MANAGER.as_mut().unwrap().store(bvh) }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Vector3 {
+    data: [f32; 3],
+}
+impl Primitive for Vector3 {
+    fn center(&self) -> [f32; 3] {
+        self.data
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Vector4 {
+    data: [f32; 4],
+}
+impl Primitive for Vector4 {
+    fn center(&self) -> [f32; 3] {
+        [self.data[0], self.data[1], self.data[2]]
+    }
 }
 
 #[no_mangle]
@@ -316,6 +337,14 @@ pub extern "C" fn create_bvh(
     bvh_type: BVHType,
 ) -> RTBVH {
     assert_eq!(center_stride % 4, 0);
+    assert!(
+        center_stride >= 12,
+        "Only centers of 12 <= stride <= 16 should be used."
+    );
+    assert!(
+        center_stride <= 16,
+        "Only centers of 12 <= stride <= 16 should be used."
+    );
     unsafe {
         if MANAGER.is_none() {
             MANAGER = Some(StructureManager {
@@ -326,29 +355,31 @@ pub extern "C" fn create_bvh(
     }
 
     let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const AABB, prim_count) };
+    let bvh = unsafe {
+        match center_stride {
+            12 => {
+                let primitives = std::slice::from_raw_parts(centers as *const Vector3, prim_count);
+                let builder = bvh::Builder { aabbs, primitives };
+                match bvh_type {
+                    BVHType::LocallyOrderedClustered => {
+                        builder.construct_locally_ordered_clustered()
+                    }
+                    BVHType::BinnedSAH => builder.construct_binned_sah(),
+                }
+            }
+            16 => {
+                let primitives = std::slice::from_raw_parts(centers as *const Vector4, prim_count);
+                let builder = bvh::Builder { aabbs, primitives };
 
-    let bvh = if center_stride == 16 {
-        let centers: &[Vec3A] =
-            unsafe { std::slice::from_raw_parts(centers as *const Vec3A, prim_count) };
-        bvh::BVH::construct(aabbs, centers, bvh_type.into())
-    } else {
-        let data = unsafe { std::slice::from_raw_parts(centers, prim_count * center_stride / 4) };
-        let offset = center_stride / 4;
-        let centers: Vec<Vec3A> = (0..prim_count)
-            .into_iter()
-            .map(|i| {
-                let ix = i * offset;
-                let iy = ix + 1;
-                let iz = ix + 2;
-
-                let x = data[ix];
-                let y = data[iy];
-                let z = data[iz];
-
-                Vec3A::new(x, y, z)
-            })
-            .collect();
-        bvh::BVH::construct(aabbs, centers.as_slice(), bvh_type.into())
+                match bvh_type {
+                    BVHType::LocallyOrderedClustered => {
+                        builder.construct_locally_ordered_clustered()
+                    }
+                    BVHType::BinnedSAH => builder.construct_binned_sah(),
+                }
+            }
+            _ => panic!("Invalid stride, only centers of 12 <= stride <= 16 should be used."),
+        }
     };
 
     unsafe { MANAGER.as_mut().unwrap().store(bvh) }

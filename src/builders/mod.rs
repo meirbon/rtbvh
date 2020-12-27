@@ -8,7 +8,7 @@ pub mod binned_sah;
 pub mod locb;
 pub mod spatial_sah;
 
-pub trait Builder {
+pub trait BuildAlgorithm {
     fn build(self) -> BVH;
 }
 

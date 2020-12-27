@@ -1,5 +1,8 @@
-use crate::builders::{AtomicNodeStack, Builder};
-use crate::utils::*;
+use crate::{
+    builders::{AtomicNodeStack, BuildAlgorithm},
+    Primitive,
+};
+use crate::{utils::*, BuildType};
 use crate::{BVHNode, AABB, BVH};
 use glam::*;
 use std::fmt::Debug;
@@ -27,7 +30,7 @@ impl Default for SahSplit {
     }
 }
 
-struct BinnedSahBuildTask<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> {
+struct BinnedSahBuildTask<'a, T: Primitive> {
     bins_per_axis: [Vec<SahBin>; 3],
     builder: &'a BinnedSahBuilder<'a, T>,
     allocator: AtomicNodeStack<'a>,
@@ -39,7 +42,7 @@ struct BinnedSahBuildTask<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> {
     pub depth: usize,
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
     pub fn new(
         builder: &'a BinnedSahBuilder<'a, T>,
         allocator: AtomicNodeStack<'a>,
@@ -110,22 +113,21 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> BinnedSahBuildTask<'a, 
     }
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
     #[inline]
     fn compute_bin_index(
-        center: T,
+        center: [f32; 3],
         bin_count: usize,
         bin_offset: Vec3,
         center_to_bin: Vec3,
         axis: usize,
     ) -> usize {
-        let center: [f32; 3] = center.into();
         let bin_index = center[axis] * center_to_bin[axis] + bin_offset[axis];
         (bin_count - 1).min(bin_index.max(0.0) as usize)
     }
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Task for BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive> Task for BinnedSahBuildTask<'a, T> {
     fn run(mut self) -> Option<(Self, Self)> {
         let make_leaf = |node: &mut BVHNode, begin: usize, end: usize| {
             node.left_first = begin as i32;
@@ -153,7 +155,7 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Task for BinnedSahBuild
             let p_id = self.prim_indices[i] as usize;
             for axis in 0..3 {
                 let bin_index = Self::compute_bin_index(
-                    self.builder.centers[p_id],
+                    self.builder.primitives[p_id].center(),
                     bin_count,
                     bin_offset,
                     center_to_bin,
@@ -204,11 +206,11 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Task for BinnedSahBuild
             }
         }
 
-        let centers = self.builder.centers;
+        let primitives = self.builder.primitives;
         let begin_right = self.begin
             + partition(self.prim_indices, 0..(self.end - self.begin), |i| {
                 let i = *i;
-                let center = centers[i as usize];
+                let center = primitives[i as usize].center();
                 Self::compute_bin_index(center, bin_count, bin_offset, center_to_bin, best_axis)
                     < split_index
             });
@@ -284,21 +286,21 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Task for BinnedSahBuild
     }
 }
 
-pub struct BinnedSahBuilder<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> {
+pub struct BinnedSahBuilder<'a, T: Primitive> {
     aabbs: &'a [AABB],
-    centers: &'a [T],
+    primitives: &'a [T],
     max_depth: usize,
     bin_count: usize,
     max_leaf_size: usize,
     traversal_cost: f32,
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> BinnedSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [T]) -> Self {
-        debug_assert_eq!(aabbs.len(), centers.len());
+impl<'a, T: Primitive> BinnedSahBuilder<'a, T> {
+    pub fn new(aabbs: &'a [AABB], primitives: &'a [T]) -> Self {
+        debug_assert_eq!(aabbs.len(), primitives.len());
         Self {
             aabbs,
-            centers,
+            primitives,
             max_depth: 64,
             bin_count: 16,
             max_leaf_size: 5,
@@ -331,7 +333,7 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> BinnedSahBuilder<'a, T>
     }
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Builder for BinnedSahBuilder<'a, T> {
+impl<'a, T: Primitive> BuildAlgorithm for BinnedSahBuilder<'a, T> {
     fn build(self) -> BVH {
         let prim_count = self.aabbs.len();
         let mut nodes = vec![BVHNode::new(); prim_count * 2 - 1];
@@ -371,6 +373,7 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> Builder for BinnedSahBu
         let mut bvh = BVH {
             nodes,
             prim_indices,
+            build_type: BuildType::BinnedSAH,
         };
 
         bvh.refit(self.aabbs);

@@ -1,27 +1,26 @@
-use crate::builders::*;
 use crate::morton::*;
 use crate::utils::{prefix_sum, UnsafeSliceWrapper};
 use crate::*;
+use builders::BuildAlgorithm;
 use glam::Vec3A;
 use rayon::prelude::*;
-use std::fmt::Debug;
 
-pub struct LocallyOrderedClusteringBuilder<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> {
+pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive> {
     aabbs: &'a [AABB],
-    centers: &'a [T],
+    primitives: &'a [T],
     encoder: MortonEncoder,
     world_bounds: AABB,
     search_radius: usize,
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> LocallyOrderedClusteringBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [T]) -> Self {
+impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
+    pub fn new(aabbs: &'a [AABB], primitives: &'a [T]) -> Self {
         let world_bounds = AABB::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
         Self {
             aabbs,
-            centers,
+            primitives,
             encoder,
             world_bounds,
             search_radius: 14,
@@ -244,9 +243,7 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> LocallyOrderedClusterin
     }
 }
 
-impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy + Copy + Copy + Copy> Builder
-    for LocallyOrderedClusteringBuilder<'a, T>
-{
+impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T> {
     fn build(self) -> BVH {
         debug_assert!(!self.aabbs.is_empty());
 
@@ -260,10 +257,11 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy + Copy + Copy + Copy> Bu
                     count: prim_count as i32,
                 }],
                 prim_indices: (0..prim_count).into_iter().map(|i| i as u32).collect(),
+                build_type: BuildType::LocallyOrderedClustered,
             };
         }
 
-        let (prim_indices, _) = self.encoder.get_sorted_indices(self.aabbs, self.centers);
+        let (prim_indices, _) = self.encoder.get_sorted_indices(self.aabbs, self.primitives);
         let node_count = 2 * prim_count - 1;
 
         let mut nodes = vec![
@@ -318,6 +316,7 @@ impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy + Copy + Copy + Copy> Bu
         BVH {
             nodes,
             prim_indices,
+            build_type: BuildType::LocallyOrderedClustered,
         }
     }
 }

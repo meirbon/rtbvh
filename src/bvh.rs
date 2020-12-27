@@ -1,71 +1,80 @@
-use crate::aabb::Bounds;
 use crate::builders::spatial_sah::SpatialTriangle;
 use crate::builders::*;
 use crate::bvh_node::*;
 use crate::mbvh_node::*;
+use crate::{aabb::Bounds, builders::BuildAlgorithm};
 use crate::{RayPacket4, AABB};
 use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-/// A BVH structure with nodes and primitive indices
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BVH {
-    pub nodes: Vec<BVHNode>,
-    pub prim_indices: Vec<u32>,
+pub trait Primitive: Debug + Copy + Send + Sync {
+    fn center(&self) -> [f32; 3];
 }
 
-#[derive(Debug, Clone)]
-pub enum BuildType<'a, T: SpatialTriangle + Sized + Debug + Send + Sync> {
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum BuildType {
+    None,
     LocallyOrderedClustered,
     BinnedSAH,
-    Spatial(&'a [T]),
+    Spatial,
 }
 
-pub struct BuildDescriptor<
-    'a,
-    T: Into<[f32; 3]> + Debug + Send + Sync,
-    S: SpatialTriangle + Debug + Send + Sync,
-> {
-    aabbs: &'a [AABB],
-    centers: &'a [T],
-    algorithm: BuildType<'a, S>,
+pub struct Builder<'a, T: Primitive> {
+    pub aabbs: &'a [AABB],
+    pub primitives: &'a [T],
+}
+
+impl<'a, T: Primitive> Builder<'a, T> {
+    pub fn construct_spatial_sah(self) -> BVH
+    where
+        T: SpatialTriangle,
+    {
+        spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives).build()
+    }
+
+    pub fn construct_binned_sah(self) -> BVH {
+        binned_sah::BinnedSahBuilder::new(self.aabbs, self.primitives).build()
+    }
+
+    pub fn construct_locally_ordered_clustered(self) -> BVH {
+        locb::LocallyOrderedClusteringBuilder::new(self.aabbs, self.primitives).build()
+    }
+}
+
+// A BVH structure with nodes and primitive indices
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BVH {
+    pub(crate) nodes: Vec<BVHNode>,
+    pub(crate) prim_indices: Vec<u32>,
+    pub(crate) build_type: BuildType,
+}
+
+impl Default for BVH {
+    fn default() -> Self {
+        Self {
+            nodes: Default::default(),
+            prim_indices: Default::default(),
+            build_type: BuildType::None,
+        }
+    }
 }
 
 impl BVH {
-    pub fn empty() -> BVH {
-        BVH {
-            nodes: Vec::new(),
-            prim_indices: Vec::new(),
-        }
+    pub fn nodes(&self) -> &[BVHNode] {
+        self.nodes.as_slice()
+    }
+
+    pub fn indices(&self) -> &[u32] {
+        self.prim_indices.as_slice()
+    }
+
+    pub fn build_type(&self) -> BuildType {
+        self.build_type
     }
 
     pub fn prim_count(&self) -> usize {
         self.prim_indices.len()
-    }
-
-    pub fn construct<
-        T: Into<[f32; 3]> + Debug + Send + Sync + Copy,
-        S: SpatialTriangle + Sized + Debug + Send + Sync,
-    >(
-        build_descriptor: BuildDescriptor<'_, T, S>,
-    ) -> Self {
-        let aabbs = build_descriptor.aabbs;
-        let centers = build_descriptor.centers;
-        match build_descriptor.algorithm {
-            BuildType::LocallyOrderedClustered => {
-                let builder = locb::LocallyOrderedClusteringBuilder::new(aabbs, centers);
-                builder.build()
-            }
-            BuildType::BinnedSAH => {
-                let builder = binned_sah::BinnedSahBuilder::new(aabbs, centers);
-                builder.build()
-            }
-            BuildType::Spatial(triangles) => {
-                let builder = spatial_sah::SpatialSahBuilder::new(aabbs, centers, triangles);
-                builder.build()
-            }
-        }
     }
 
     pub fn refit(&mut self, new_aabbs: &[AABB]) {
@@ -264,18 +273,32 @@ impl BVH {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MBVH {
-    pub nodes: Vec<BVHNode>,
-    pub m_nodes: Vec<MBVHNode>,
-    pub prim_indices: Vec<u32>,
+    pub(crate) nodes: Vec<BVHNode>,
+    pub(crate) m_nodes: Vec<MBVHNode>,
+    pub(crate) prim_indices: Vec<u32>,
+}
+
+impl Default for MBVH {
+    fn default() -> Self {
+        Self {
+            nodes: Default::default(),
+            m_nodes: Default::default(),
+            prim_indices: Default::default(),
+        }
+    }
 }
 
 impl MBVH {
-    pub fn empty() -> MBVH {
-        MBVH {
-            nodes: Vec::new(),
-            m_nodes: Vec::new(),
-            prim_indices: Vec::new(),
-        }
+    pub fn nodes(&self) -> &[BVHNode] {
+        self.nodes.as_slice()
+    }
+
+    pub fn quad_nodes(&self) -> &[MBVHNode] {
+        self.m_nodes.as_slice()
+    }
+
+    pub fn indices(&self) -> &[u32] {
+        self.prim_indices.as_slice()
     }
 
     pub fn prim_count(&self) -> usize {

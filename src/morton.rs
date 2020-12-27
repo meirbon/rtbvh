@@ -61,12 +61,12 @@ impl MortonEncoder {
         Self::morton_encode(x, y, z)
     }
 
-    pub fn get_sorted_indices<T: Into<[f32; 3]> + Send + Sync + Debug + Copy>(
+    pub fn get_sorted_indices<T: Primitive>(
         &self,
         aabbs: &[AABB],
-        centers: &[T],
+        primitives: &[T],
     ) -> (Vec<u32>, Vec<u32>) {
-        debug_assert_eq!(aabbs.len(), centers.len());
+        debug_assert_eq!(aabbs.len(), primitives.len());
         let prim_count = aabbs.len();
 
         let mut indices: Vec<u32> = (0..(prim_count as u32)).collect();
@@ -74,13 +74,13 @@ impl MortonEncoder {
         #[cfg(not(feature = "wasm_support"))]
         let morton_codes: Vec<u32> = (0..prim_count)
             .into_par_iter()
-            .map(|i| self.encode(Vec3::from(centers[i].into())))
+            .map(|i| self.encode(Vec3::from(primitives[i].center())))
             .collect();
 
         #[cfg(feature = "wasm_support")]
         let morton_codes: Vec<u32> = (0..prim_count)
             .into_iter()
-            .map(|i| self.encode(Vec3A::from(centers[i].into())))
+            .map(|i| self.encode(Vec3::from(primitives[i].center())))
             .collect();
 
         #[cfg(not(feature = "wasm_support"))]
