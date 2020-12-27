@@ -9,6 +9,14 @@ A fast BVH library written in Rust. This library contains implementations of the
 All building algorithms make efficient use of multithreading where possible.
 An MBVH implementation is included as well and all the BVH structures implement traversal algorithms for both single rays and quad rays.
 This library emits a C/C++ library which is used in my [hobby renderer](https://github.com/meirbon/rendering-fw).
+
+## Performance
+In a scene with a teapot of ~6300 triangles, my MacBook Pro with an 8-core i9 9980HK achieves the following performance:
+```
+Single: 1.000.000 rays in 245.744 ms, 4.0692754 million rays per second
+Packets: 1.000.000 rays in 107.112 ms, 9.336022 million rays per second
+```
+
 ## Usage
 ```rust
 use rtbvh::*;

@@ -462,7 +462,7 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
 
             for _ in 0..self.builder.binning_pass_count {
                 if let Some(next_bounds) =
-                    self.run_binning_pass(&mut split, axis, begin, end, min, max)
+                self.run_binning_pass(&mut split, axis, begin, end, min, max)
                 {
                     min = next_bounds.0;
                     max = next_bounds.1;
@@ -813,7 +813,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         let (node_stack, first_node) = AtomicNodeStack::new(&node_count, nodes.as_mut_slice());
 
         #[cfg(feature = "wasm_support")]
-        references.iter().for_each(|r| {
+            references.iter().for_each(|r| {
             r.as_mut()[0..prim_count]
                 .iter_mut()
                 .enumerate()
@@ -825,7 +825,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         });
 
         #[cfg(not(feature = "wasm_support"))]
-        references.iter().par_bridge().for_each(|r| {
+            references.iter().par_bridge().for_each(|r| {
             r.as_mut()[0..prim_count]
                 .iter_mut()
                 .enumerate()
@@ -861,19 +861,19 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         );
 
         #[cfg(feature = "wasm_support")]
-        {
-            let mut stack = vec![root_task];
-            while let Some(task) = stack.pop() {
-                if let Some(left_task, right_task) = task.run() {
-                    stack.push(left);
-                    stack.push(right);
+            {
+                let mut stack = vec![root_task];
+                while let Some(task) = stack.pop() {
+                    if let Some(left_task, right_task) = task.run() {
+                        stack.push(left);
+                        stack.push(right);
+                    }
                 }
             }
-        }
 
         // Launch build task
         #[cfg(not(feature = "wasm_support"))]
-        task_spawner.run(root_task);
+            task_spawner.run(root_task);
 
         nodes.resize(node_count.load(SeqCst), BVHNode::new());
 
@@ -881,7 +881,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         let mut bvh = BVH {
             nodes,
             prim_indices,
-            build_type: BuildType::Spatial
+            build_type: BuildType::Spatial,
         };
 
         // Compose AABBs for nodes
