@@ -5,7 +5,7 @@ authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
 repository = "https://github.com/meirbon/rtbvh"
-description = "BVH library written in Rust."
+description = "BVH library with various build algorithms and support for packet traversal."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
