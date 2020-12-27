@@ -28,7 +28,6 @@ pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &
         .into_iter()
         .map(|i| primitives[indices[i] as usize].clone())
         .collect()
-
 }
 
 #[allow(dead_code)]
@@ -363,8 +362,7 @@ mod tests {
         }
 
         for i in 0..3 {
-            assert_eq!(src[i], 0);
-            assert_eq!(dest[i], i as u32);
+            assert_eq!(src[i], dest[i]);
         }
     }
 }

@@ -10,6 +10,7 @@ use std::fmt::Debug;
 
 pub trait Primitive: Debug + Copy + Send + Sync {
     fn center(&self) -> [f32; 3];
+    fn aabb(&self) -> AABB;
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
