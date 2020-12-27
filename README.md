@@ -4,11 +4,81 @@ A fast BVH library written in Rust. This library contains implementations of the
 - Binned SAH (High quality, decently fast)
 - Locally Ordered Clustering Builder (Very fast build times)
 
-All building algorithms make efficient use of multiple threads (the best way they possibly can).
-
+All building algorithms make efficient use of multithreading where possible.
 An MBVH implementation is included as well and all the BVH structures implement traversal algorithms for both single rays and quad rays.
-
 This library emits a C/C++ library which is used in my [hobby renderer](https://github.com/meirbon/rendering-fw).
+## Usage
+```rust
+use rtbvh::*;
+#[derive(Debug, Copy, Clone)]
+struct Triangle {
+    vertex0: [f32; 3],
+    vertex1: [f32; 3],
+    vertex2: [f32; 3],
+}
+
+impl Primitive for Triangle {
+    fn center(&self) -> [f32; 3] {
+        let mut result = [0.0; 3];
+        for i in 0..3 {
+            result[i] = (self.vertex0[i] + self.vertex1[i] + self.vertex2[i]) / 3.0;
+        }
+        result
+    }
+
+    fn aabb(&self) -> crate::AABB {
+        let mut aabb = crate::AABB::new();
+        aabb.grow(self.vertex0);
+        aabb.grow(self.vertex1);
+        aabb.grow(self.vertex2);
+        aabb
+    }
+}
+
+impl SpatialTriangle for Triangle {
+    fn vertex0(&self) -> [f32; 3] {
+        self.vertex0
+    }
+
+    fn vertex1(&self) -> [f32; 3] {
+        self.vertex1
+    }
+
+    fn vertex2(&self) -> [f32; 3] {
+        self.vertex2
+    }
+}
+
+let vertices: Vec<[f32; 3]> = vec![
+    [-1.0, -1.0, 0.0],
+    [1.0, -1.0, 0.0],
+    [1.0, 1.0, 0.0],
+    [-1.0, 1.0, 0.0],
+];
+
+let primitives: Vec<Triangle> = vec![
+    Triangle {
+        vertex0: vertices[0],
+        vertex1: vertices[1],
+        vertex2: vertices[2],
+    },
+    Triangle {
+        vertex0: vertices[0],
+        vertex1: vertices[2],
+        vertex2: vertices[3],
+    },
+];
+let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<AABB>>();
+let builder = Builder {
+    aabbs: aabbs.as_slice(),
+    primitives: primitives.as_slice(),
+};
+
+// Choose one of these algorithms:
+let bvh = builder.clone().construct_locally_ordered_clustered();
+let bvh = builder.clone().construct_binned_sah();
+let bvh = builder.construct_spatial_sah();
+```
 
 # Planning
 - Benchmark
