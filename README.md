@@ -10,9 +10,7 @@ An MBVH implementation is included as well and all the BVH structures implement 
 
 This library emits a C/C++ library which is used in my [hobby renderer](https://github.com/meirbon/rendering-fw).
 
-# TODO
+# Planning
 - Benchmark
-- Implement more algorithms?
-- Add fine-tuned SIMD intersection algorithms
 - Add support for packets larger than 4
 - Increase coverage of API for FFI
