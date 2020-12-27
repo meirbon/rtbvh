@@ -4,8 +4,10 @@ version = "0.1.2"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
+readme = "./README.md"
 repository = "https://github.com/meirbon/rtbvh"
 description = "BVH library with various build algorithms and support for packet traversal."
+keywords = ["ray", "tracing", "bvh", "sah", "fast"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
