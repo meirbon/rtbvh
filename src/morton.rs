@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 use crate::{utils::*, *};
 use glam::*;
+use std::fmt::Debug;
 
 #[cfg(not(feature = "wasm_support"))]
 use rayon::prelude::*;
@@ -25,8 +26,8 @@ pub fn morton_split(int: u32) -> u32 {
 }
 
 pub struct MortonEncoder {
-    world_to_grid: Vec3A,
-    grid_offset: Vec3A,
+    world_to_grid: Vec3,
+    grid_offset: Vec3,
     grid_dim: usize,
 }
 
@@ -35,8 +36,8 @@ impl MortonEncoder {
 
     pub fn new(aabb: &AABB, grid_dim: usize) -> MortonEncoder {
         debug_assert!(grid_dim <= Self::MAX_GRID_DIM);
-        let world_to_grid = grid_dim as f32 * (1.0 / aabb.diagonal::<Vec3A>());
-        let grid_offset = -Vec3A::from(aabb.min) * world_to_grid;
+        let world_to_grid = grid_dim as f32 * (1.0 / aabb.diagonal::<Vec3>());
+        let grid_offset = -Vec3::from(aabb.min) * world_to_grid;
 
         Self {
             world_to_grid,
@@ -49,8 +50,8 @@ impl MortonEncoder {
         morton_split(x) | (morton_split(y) << 1) | (morton_split(z) << 2)
     }
 
-    pub fn encode(&self, point: Vec3A) -> u32 {
-        let grid_pos = point * self.world_to_grid + self.grid_offset;
+    pub fn encode<T: Into<[f32; 3]> + Debug + Copy>(&self, point: T) -> u32 {
+        let grid_pos = Vec3::from(point.into()) * self.world_to_grid + self.grid_offset;
         let min = (self.grid_dim - 1) as i32;
 
         let x: u32 = min.min((grid_pos[0] as i32).max(0)) as u32;
@@ -60,7 +61,11 @@ impl MortonEncoder {
         Self::morton_encode(x, y, z)
     }
 
-    pub fn get_sorted_indices(&self, aabbs: &[AABB], centers: &[Vec3A]) -> (Vec<u32>, Vec<u32>) {
+    pub fn get_sorted_indices<T: Into<[f32; 3]> + Send + Sync + Debug + Copy>(
+        &self,
+        aabbs: &[AABB],
+        centers: &[T],
+    ) -> (Vec<u32>, Vec<u32>) {
         debug_assert_eq!(aabbs.len(), centers.len());
         let prim_count = aabbs.len();
 
@@ -69,13 +74,13 @@ impl MortonEncoder {
         #[cfg(not(feature = "wasm_support"))]
         let morton_codes: Vec<u32> = (0..prim_count)
             .into_par_iter()
-            .map(|i| self.encode(centers[i]))
+            .map(|i| self.encode(Vec3::from(centers[i].into())))
             .collect();
 
         #[cfg(feature = "wasm_support")]
         let morton_codes: Vec<u32> = (0..prim_count)
             .into_iter()
-            .map(|i| self.encode(centers[i]))
+            .map(|i| self.encode(Vec3A::from(centers[i].into())))
             .collect();
 
         #[cfg(not(feature = "wasm_support"))]

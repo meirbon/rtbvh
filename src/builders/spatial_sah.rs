@@ -5,6 +5,7 @@ use glam::*;
 use rayon::prelude::*;
 use std::{
     cmp::Ordering,
+    fmt::Debug,
     sync::atomic::{AtomicUsize, Ordering::SeqCst},
 };
 
@@ -57,7 +58,7 @@ impl Default for SpatialSplit {
 #[derive(Debug, Copy, Clone)]
 struct SpatialReference {
     aabb: AABB,
-    center: Vec3A,
+    center: Vec3,
     prim_id: u32,
 }
 
@@ -65,7 +66,7 @@ impl Default for SpatialReference {
     fn default() -> Self {
         Self {
             aabb: AABB::empty(),
-            center: Vec3A::zero(),
+            center: Vec3::zero(),
             prim_id: 0,
         }
     }
@@ -160,8 +161,12 @@ impl WorkItem {
     }
 }
 
-struct SpatialSahBuildTask<'a, T: Sized + SpatialTriangle + Send + Sync> {
-    builder: &'a SpatialSahBuilder<'a, T>,
+struct SpatialSahBuildTask<
+    'a,
+    T: Into<[f32; 3]> + Send + Sync + Debug + Copy,
+    S: Sized + SpatialTriangle + Send + Sync,
+> {
+    builder: &'a SpatialSahBuilder<'a, T, S>,
     allocator: AtomicNodeStack<'a>,
     references: [UnsafeSliceWrapper<'a, SpatialReference>; 3],
     reference_count: &'a AtomicUsize,
@@ -171,9 +176,11 @@ struct SpatialSahBuildTask<'a, T: Sized + SpatialTriangle + Send + Sync> {
     spatial_threshold: f32,
 }
 
-impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuildTask<'a, T> {
+impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy, S: Sized + SpatialTriangle + Send + Sync>
+    SpatialSahBuildTask<'a, T, S>
+{
     pub fn new(
-        builder: &'a SpatialSahBuilder<'a, T>,
+        builder: &'a SpatialSahBuilder<'a, T, S>,
         allocator: AtomicNodeStack<'a>,
         references: [UnsafeSliceWrapper<'a, SpatialReference>; 3],
         reference_count: &'a AtomicUsize,
@@ -399,7 +406,7 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuildTask<'a, T> {
 
             let mut current_aabb = reference.aabb.clone();
             for j in first_bin..last_bin {
-                let triangle: &T = &self.builder.triangles[reference.prim_id as usize];
+                let triangle = &self.builder.triangles[reference.prim_id as usize];
                 let (mut left_box, right_box) =
                     triangle.split(axis, min + (j + 1) as f32 * bin_size);
                 left_box.shrink(&current_aabb);
@@ -587,7 +594,9 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuildTask<'a, T> {
     }
 }
 
-impl<'a, T: Sized + SpatialTriangle + Send + Sync> Task for SpatialSahBuildTask<'a, T> {
+impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy, S: Sized + SpatialTriangle + Send + Sync> Task
+    for SpatialSahBuildTask<'a, T, S>
+{
     fn run(mut self) -> Option<(Self, Self)> {
         let node = self.allocator.get_mut(self.work_item.node).unwrap();
         let spatial_threshold = self.spatial_threshold;
@@ -705,10 +714,14 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> Task for SpatialSahBuildTask<
     }
 }
 
-pub struct SpatialSahBuilder<'a, T: Sized + SpatialTriangle + Send + Sync> {
+pub struct SpatialSahBuilder<
+    'a,
+    T: Into<[f32; 3]> + Send + Sync + Debug + Copy,
+    S: Sized + SpatialTriangle + Send + Sync,
+> {
     aabbs: &'a [AABB],
-    centers: &'a [Vec3A],
-    triangles: &'a [T],
+    centers: &'a [T],
+    triangles: &'a [S],
 
     binning_pass_count: usize,
     max_depth: usize,
@@ -720,8 +733,13 @@ pub struct SpatialSahBuilder<'a, T: Sized + SpatialTriangle + Send + Sync> {
     split_factor: f32,
 }
 
-impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3A], triangles: &'a [T]) -> Self {
+impl<
+        'a,
+        T: Into<[f32; 3]> + Send + Sync + Debug + Copy,
+        S: Sized + SpatialTriangle + Send + Sync + Debug,
+    > SpatialSahBuilder<'a, T, S>
+{
+    pub fn new(aabbs: &'a [AABB], centers: &'a [T], triangles: &'a [S]) -> Self {
         debug_assert_eq!(aabbs.len(), centers.len());
         debug_assert_eq!(aabbs.len(), triangles.len());
 
@@ -782,7 +800,9 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> SpatialSahBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Sized + SpatialTriangle + Send + Sync> Builder for SpatialSahBuilder<'a, T> {
+impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy, S: Sized + SpatialTriangle + Send + Sync> Builder
+    for SpatialSahBuilder<'a, T, S>
+{
     fn build(self) -> BVH {
         let prim_count = self.aabbs.len();
         let max_reference_count = prim_count + (prim_count as f32 * self.split_factor) as usize;
@@ -830,7 +850,7 @@ impl<'a, T: Sized + SpatialTriangle + Send + Sync> Builder for SpatialSahBuilder
                 .enumerate()
                 .for_each(|(i, sref)| {
                     sref.aabb = self.aabbs[i];
-                    sref.center = self.centers[i];
+                    sref.center = Vec3::from(self.centers[i].into());
                     sref.prim_id = i as u32;
                 });
         });

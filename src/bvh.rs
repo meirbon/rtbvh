@@ -1,19 +1,35 @@
-use glam::*;
-
 use crate::aabb::Bounds;
 use crate::builders::spatial_sah::SpatialTriangle;
 use crate::builders::*;
 use crate::bvh_node::*;
 use crate::mbvh_node::*;
 use crate::{RayPacket4, AABB};
-
+use glam::*;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 /// A BVH structure with nodes and primitive indices
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BVH {
     pub nodes: Vec<BVHNode>,
     pub prim_indices: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub enum BuildType<'a, T: SpatialTriangle + Sized + Debug + Send + Sync> {
+    LocallyOrderedClustered,
+    BinnedSAH,
+    Spatial(&'a [T]),
+}
+
+pub struct BuildDescriptor<
+    'a,
+    T: Into<[f32; 3]> + Debug + Send + Sync,
+    S: SpatialTriangle + Debug + Send + Sync,
+> {
+    aabbs: &'a [AABB],
+    centers: &'a [T],
+    algorithm: BuildType<'a, S>,
 }
 
 impl BVH {
@@ -28,31 +44,28 @@ impl BVH {
         self.prim_indices.len()
     }
 
-    pub fn construct(aabbs: &[AABB], centers: &[Vec3A], build_type: BVHType) -> Self {
-        match build_type {
-            BVHType::LocallyOrderedClustered => {
+    pub fn construct<
+        T: Into<[f32; 3]> + Debug + Send + Sync + Copy,
+        S: SpatialTriangle + Sized + Debug + Send + Sync,
+    >(
+        build_descriptor: BuildDescriptor<'_, T, S>,
+    ) -> Self {
+        let aabbs = build_descriptor.aabbs;
+        let centers = build_descriptor.centers;
+        match build_descriptor.algorithm {
+            BuildType::LocallyOrderedClustered => {
                 let builder = locb::LocallyOrderedClusteringBuilder::new(aabbs, centers);
                 builder.build()
             }
-            BVHType::BinnedSAH => {
+            BuildType::BinnedSAH => {
                 let builder = binned_sah::BinnedSahBuilder::new(aabbs, centers);
                 builder.build()
             }
+            BuildType::Spatial(triangles) => {
+                let builder = spatial_sah::SpatialSahBuilder::new(aabbs, centers, triangles);
+                builder.build()
+            }
         }
-    }
-
-    pub fn construct_spatial<T>(aabbs: &[AABB], centers: &[Vec3A], triangles: &[T]) -> Self
-    where
-        T: Sized + SpatialTriangle + Send + Sync,
-    {
-        debug_assert_eq!(aabbs.len(), centers.len());
-        debug_assert_eq!(aabbs.len(), triangles.len());
-
-        let builder = spatial_sah::SpatialSahBuilder::new(aabbs, centers, triangles);
-        let bvh = builder.build();
-
-        bvh.validate(aabbs.len());
-        bvh
     }
 
     pub fn refit(&mut self, new_aabbs: &[AABB]) {

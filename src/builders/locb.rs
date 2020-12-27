@@ -4,17 +4,18 @@ use crate::utils::{prefix_sum, UnsafeSliceWrapper};
 use crate::*;
 use glam::Vec3A;
 use rayon::prelude::*;
+use std::fmt::Debug;
 
-pub struct LocallyOrderedClusteringBuilder<'a> {
+pub struct LocallyOrderedClusteringBuilder<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> {
     aabbs: &'a [AABB],
-    centers: &'a [Vec3A],
+    centers: &'a [T],
     encoder: MortonEncoder,
     world_bounds: AABB,
     search_radius: usize,
 }
 
-impl<'a> LocallyOrderedClusteringBuilder<'a> {
-    pub fn new(aabbs: &'a [AABB], centers: &'a [Vec3A]) -> Self {
+impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy> LocallyOrderedClusteringBuilder<'a, T> {
+    pub fn new(aabbs: &'a [AABB], centers: &'a [T]) -> Self {
         let world_bounds = AABB::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
@@ -243,7 +244,9 @@ impl<'a> LocallyOrderedClusteringBuilder<'a> {
     }
 }
 
-impl<'a> Builder for LocallyOrderedClusteringBuilder<'a> {
+impl<'a, T: Into<[f32; 3]> + Send + Sync + Debug + Copy + Copy + Copy + Copy> Builder
+    for LocallyOrderedClusteringBuilder<'a, T>
+{
     fn build(self) -> BVH {
         debug_assert!(!self.aabbs.is_empty());
 
