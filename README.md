@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/MeirBon/rtbvh.svg?branch=master)](https://travis-ci.org/MeirBon/rtbvh)
+
 # RTBVH
 A fast BVH library written in Rust. This library contains implementations of the following BVH building algorithms:
 - SAH with Spatial splits (Highest quality, slow build times)
