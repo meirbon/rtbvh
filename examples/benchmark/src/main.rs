@@ -5,6 +5,7 @@ use glam::*;
 use std::time::{Duration, Instant};
 use rtbvh::builders::spatial_sah::SpatialTriangle;
 use std::ops::BitAnd;
+use rayon::prelude::*;
 
 #[derive(Debug, Copy, Clone)]
 struct Triangle {
@@ -182,7 +183,7 @@ fn main() {
     const EPSILON: f32 = 1e-6;
 
     let timer = Timer::new();
-    for _ in 0..1_000_000 {
+    (0..1_000_000).into_iter().for_each(|_| {
         let _hit_id = bvh.traverse(origin.as_ref(), direction.as_ref(), 1e-4, 1e34, |id, t_min, t_max| -> Option<(f32, usize)> {
             let t = unsafe { primitives.get_unchecked(id) };
             let edge1 = t.vertex1.xyz() - t.vertex0.xyz();
@@ -210,9 +211,42 @@ fn main() {
             }
             None
         });
-    }
+    });
     let elapsed = timer.elapsed_in_millis();
-    println!("Single: 1.000.000 rays in {} ms, {} million rays per second", elapsed, 1000.0 / elapsed);
+    println!("Single-threaded rays: 1.000.000 rays in {} ms, {} million rays per second", elapsed, 1000.0 / elapsed);
+
+    let timer = Timer::new();
+    (0..1_000_000).into_par_iter().for_each(|_| {
+        let _hit_id = bvh.traverse(origin.as_ref(), direction.as_ref(), 1e-4, 1e34, |id, t_min, t_max| -> Option<(f32, usize)> {
+            let t = unsafe { primitives.get_unchecked(id) };
+            let edge1 = t.vertex1.xyz() - t.vertex0.xyz();
+            let edge2 = t.vertex2.xyz() - t.vertex0.xyz();
+            let h = direction.cross(edge2);
+            let a = edge1.dot(h);
+            if a > -EPSILON && a < EPSILON {
+                return None;
+            }
+            let f = 1.0 / a;
+            let s = origin - t.vertex0.xyz();
+            let u = f * s.dot(h);
+            if u < 0.0 || u > 1.0 {
+                return None;
+            }
+            let q = s.cross(edge1);
+            let v = f * direction.dot(q);
+            if v < 0. || (u + v) > 1.0 {
+                return None;
+            }
+
+            let t: f32 = f * edge2.dot(q);
+            if t > t_min && t < t_max {
+                return Some((t, id));
+            }
+            None
+        });
+    });
+    let elapsed = timer.elapsed_in_millis();
+    println!("{} threads rays: 1.000.000 rays in {} ms, {} million rays per second", rayon::current_num_threads(), elapsed, 1000.0 / elapsed);
 
     let origin_x = [0.0; 4];
     let origin_y = [1.5; 4];
@@ -222,7 +256,7 @@ fn main() {
     let direction_z = [1.0; 4];
 
     let timer = Timer::new();
-    for _ in 0..250_000 {
+    (0..250_000).into_iter().for_each(|_| {
         let mut packet = RayPacket4 {
             origin_x,
             origin_y,
@@ -238,7 +272,28 @@ fn main() {
             let t = unsafe { primitives.get_unchecked(id) };
             let _result = t.intersect4(packet, &[1e-5; 4]);
         });
-    }
+    });
     let elapsed = timer.elapsed_in_millis();
-    println!("Packets: 1.000.000 rays in {} ms, {} million rays per second", elapsed, 1000.0 / elapsed);
+    println!("Single-threaded packets: 1.000.000 rays in {} ms, {} million rays per second", elapsed, 1000.0 / elapsed);
+
+    let timer = Timer::new();
+    (0..250_000).into_par_iter().for_each(|_| {
+        let mut packet = RayPacket4 {
+            origin_x,
+            origin_y,
+            origin_z,
+            direction_x,
+            direction_y,
+            direction_z,
+            pixel_ids: [0; 4],
+            t: [1e34; 4],
+        };
+
+        bvh.traverse4(&mut packet, |id, packet| {
+            let t = unsafe { primitives.get_unchecked(id) };
+            let _result = t.intersect4(packet, &[1e-5; 4]);
+        });
+    });
+    let elapsed = timer.elapsed_in_millis();
+    println!("{} threads packets: 1.000.000 rays in {} ms, {} million rays per second", rayon::current_num_threads(), elapsed, 1000.0 / elapsed);
 }

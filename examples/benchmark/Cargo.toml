@@ -10,3 +10,4 @@ version = "0.1.0"
 rtbvh = {path = "../../"}
 l3d = "0.1"
 glam = "0.11"
+rayon = "1.5"
