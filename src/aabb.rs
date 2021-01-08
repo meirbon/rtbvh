@@ -33,12 +33,7 @@ impl Display for AABB {
         write!(
             f,
             "(min: ({}, {}, {}), max: ({}, {}, {}))",
-            min.x,
-            min.y,
-            min.z,
-            max.x,
-            max.y,
-            max.z,
+            min.x, min.y, min.z, max.x, max.y, max.z,
         )
     }
 }
@@ -323,6 +318,22 @@ impl<T: Into<[f32; 3]>> Into<AABB> for (T, T) {
 impl<T: From<[f32; 3]>> Into<(T, T)> for AABB {
     fn into(self) -> (T, T) {
         (T::from(self.min), T::from(self.max))
+    }
+}
+
+impl Bounds for AABB {
+    fn bounds(&self) -> AABB {
+        *self
+    }
+}
+
+impl crate::Primitive for AABB {
+    fn center(&self) -> [f32; 3] {
+        self.center()
+    }
+
+    fn aabb(&self) -> AABB {
+        *self
     }
 }
 
