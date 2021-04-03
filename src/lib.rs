@@ -156,7 +156,7 @@ mod tests {
         let mesh = match result {
             LoadResult::Mesh(m) => m,
             LoadResult::Scene(_) => panic!(),
-            LoadResult::None(_) => panic!(),
+            LoadResult::None(e) => panic!("{}", e),
         };
 
         let primitives = mesh
