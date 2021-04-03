@@ -37,34 +37,28 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Build FFI release
-        working-directory: ./rtbvh_ffi
-        run: cargo build --release --verbose
+      - run: cargo build --manifest-path ./rtbvh_ffi/Cargo.toml --release --verbose
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-windows-library
-          path: ./target/release/rtbvh_rs.dll
+          path: ./rtbvh_ffi/target/release/rtbvh_rs.dll
 
   build-ffi-ubuntu:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Build FFI release
-        working-directory: ./rtbvh_ffi
-        run: cargo build --release --verbose
+      - run: cargo build --manifest-path ./rtbvh_ffi/Cargo.toml --release --verbose
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-linux-ubuntu-library
-          path: ./target/release/librtbvh_rs.so
+          path: ./rtbvh_ffi/target/release/librtbvh_rs.so
 
   build-ffi-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Build FFI release
-        working-directory: ./rtbvh_ffi
-        run: cargo build --release --verbose
+      - run: cargo build --manifest-path ./rtbvh_ffi/Cargo.toml --release --verbose
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-macos-library
-          path: ./target/release/librtbvh_rs.dylib
+          path: ./rtbvh_ffi/target/release/librtbvh_rs.dylib
