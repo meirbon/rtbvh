@@ -6,16 +6,16 @@ use glam::Vec3A;
 use rayon::prelude::*;
 
 pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive> {
-    aabbs: &'a [AABB],
+    aabbs: &'a [Aabb],
     primitives: &'a [T],
     encoder: MortonEncoder,
-    world_bounds: AABB,
+    world_bounds: Aabb,
     search_radius: usize,
 }
 
 impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], primitives: &'a [T]) -> Self {
-        let world_bounds = AABB::union_of_list(aabbs);
+    pub fn new(aabbs: &'a [Aabb], primitives: &'a [T]) -> Self {
+        let world_bounds = Aabb::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
         Self {
@@ -43,10 +43,11 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
         (begin, end)
     }
 
+    #[allow(clippy::clippy::too_many_arguments)]
     fn cluster(
         &self,
-        input: &[BVHNode],
-        output: &mut [BVHNode],
+        input: &[BvhNode],
+        output: &mut [BvhNode],
         neighbours: &mut [u32],
         merged_index: &mut [u32],
         begin: usize,
@@ -66,12 +67,15 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                 end
             };
 
-            let mut distances = vec![0.0 as f32; (self.search_radius + 1) * self.search_radius];
+            let mut distances = vec![0.0_f32; (self.search_radius + 1) * self.search_radius];
             let mut distance_matrix =
                 vec![std::ptr::null_mut() as *mut f32; self.search_radius + 1];
 
-            for i in 0..=self.search_radius {
-                distance_matrix[i] = unsafe { distances.as_mut_ptr().add(i * self.search_radius) };
+            for (i, d) in distance_matrix[0..=self.search_radius]
+                .iter_mut()
+                .enumerate()
+            {
+                *d = unsafe { distances.as_mut_ptr().add(i * self.search_radius) };
             }
 
             // Initialize distance matrix
@@ -93,7 +97,7 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                 // Backward search
                 for j in search_begin..i {
                     let distance = unsafe { *distance_matrix[i - j].add(i - j - 1) };
-                    debug_assert_ne!(distance, f32::INFINITY);
+                    debug_assert!(!distance.is_infinite());
 
                     if distance < best_distance {
                         best_distance = distance;
@@ -104,9 +108,8 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                 // Forward search
                 for j in (i + 1)..search_end {
                     let distance = input[i].bounds.union_of(&input[j].bounds).half_area();
-                    debug_assert_ne!(
-                        distance,
-                        f32::INFINITY,
+                    debug_assert!(
+                        !distance.is_infinite(),
                         "i {}, j {}, bounds1 {}, bound2 {}",
                         i,
                         j,
@@ -199,7 +202,7 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                     unmerged_node.count = -1;
                     unmerged_node.left_first = first_child as i32;
 
-                    par_output.set(first_child + 0, input[i].clone());
+                    par_output.set(first_child, input[i].clone());
                     par_output.set(first_child + 1, input[j].clone());
                 }
             } else {
@@ -235,23 +238,21 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
         });
 
         // Copy the nodes of the previous level into the current array of nodes.
-        for i in end..previous_end {
-            output[i] = input[i].clone();
-        }
+        output[end..previous_end].clone_from_slice(&input[end..previous_end]);
 
         (next_begin, next_end)
     }
 }
 
 impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T> {
-    fn build(self) -> BVH {
+    fn build(self) -> Bvh {
         debug_assert!(!self.aabbs.is_empty());
 
         let prim_count = self.aabbs.len();
         if prim_count <= 2 {
             // Splitting not worth it, just create a single root leaf node
-            return BVH {
-                nodes: vec![BVHNode {
+            return Bvh {
+                nodes: vec![BvhNode {
                     bounds: self.world_bounds,
                     left_first: 0,
                     count: prim_count as i32,
@@ -265,8 +266,8 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
         let node_count = 2 * prim_count - 1;
 
         let mut nodes = vec![
-            BVHNode {
-                bounds: (Vec3A::zero(), Vec3A::zero()).into(),
+            BvhNode {
+                bounds: (Vec3A::ZERO, Vec3A::ZERO).into(),
                 count: -1,
                 left_first: 0,
             };
@@ -313,7 +314,7 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
             end = next_end;
         }
 
-        BVH {
+        Bvh {
             nodes,
             prim_indices,
             build_type: BuildType::LocallyOrderedClustered,

@@ -14,13 +14,17 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 crossbeam = "0.8"
-glam = "0.11"
+glam = "0.13"
 num_cpus = "1.13"
-rayon = "1.5.0"
+rayon = "1.5"
 serde = { version = "1.0", features = ["derive"] }
-num = "0.3"
+num = "0.4"
 wasm-bindgen = { version = "0.2", optional = true }
 
 [features]
 default = []
 wasm_support = ["wasm-bindgen"]
+
+[dev-dependencies]
+l3d = "0.1"
+rayon = "1.5"

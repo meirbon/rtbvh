@@ -1,9 +1,9 @@
-use crate::{BuildType, utils::*};
 use crate::{
     builders::{AtomicNodeStack, BuildAlgorithm},
     Primitive,
 };
-use crate::{BVHNode, AABB, BVH};
+use crate::{utils::*, BuildType};
+use crate::{Aabb, BvhNode, Bvh};
 use glam::*;
 use rayon::prelude::*;
 use std::{
@@ -14,8 +14,8 @@ use std::{
 
 #[derive(Debug, Copy, Clone)]
 struct SpatialBin {
-    pub aabb: AABB,
-    pub accumulated_aabb: AABB,
+    pub aabb: Aabb,
+    pub accumulated_aabb: Aabb,
     pub entry: usize,
     pub exit: usize,
 }
@@ -25,8 +25,8 @@ struct ObjectSplit {
     pub cost: f32,
     pub index: usize,
     pub axis: usize,
-    pub left_box: AABB,
-    pub right_box: AABB,
+    pub left_box: Aabb,
+    pub right_box: Aabb,
 }
 
 impl Default for ObjectSplit {
@@ -35,8 +35,8 @@ impl Default for ObjectSplit {
             cost: std::f32::MAX,
             index: 1,
             axis: 0,
-            left_box: AABB::empty(),
-            right_box: AABB::empty(),
+            left_box: Aabb::empty(),
+            right_box: Aabb::empty(),
         }
     }
 }
@@ -60,7 +60,7 @@ impl Default for SpatialSplit {
 
 #[derive(Debug, Copy, Clone)]
 struct SpatialReference {
-    aabb: AABB,
+    aabb: Aabb,
     center: Vec3,
     prim_id: u32,
 }
@@ -68,8 +68,8 @@ struct SpatialReference {
 impl Default for SpatialReference {
     fn default() -> Self {
         Self {
-            aabb: AABB::empty(),
-            center: Vec3::zero(),
+            aabb: Aabb::empty(),
+            center: Vec3::ZERO,
             prim_id: 0,
         }
     }
@@ -80,15 +80,15 @@ pub trait SpatialTriangle {
     fn vertex1(&self) -> [f32; 3];
     fn vertex2(&self) -> [f32; 3];
 
-    fn split(&self, axis: usize, position: f32) -> (AABB, AABB) {
+    fn split(&self, axis: usize, position: f32) -> (Aabb, Aabb) {
         let p = [
             Vec3A::from(self.vertex0()),
             Vec3A::from(self.vertex1()),
             Vec3A::from(self.vertex2()),
         ];
 
-        let mut left = AABB::empty();
-        let mut right = AABB::empty();
+        let mut left = Aabb::empty();
+        let mut right = Aabb::empty();
 
         let split_edge = |a: Vec3A, b: Vec3A| -> Vec3A {
             let t =
@@ -170,19 +170,20 @@ struct SpatialSahBuildTask<'a, T: Primitive + SpatialTriangle> {
     references: [UnsafeSliceWrapper<'a, SpatialReference>; 3],
     reference_count: &'a AtomicUsize,
     prim_indices: UnsafeSliceWrapper<'a, u32>,
-    accumulated_aabbs: UnsafeSliceWrapper<'a, AABB>,
+    accumulated_aabbs: UnsafeSliceWrapper<'a, Aabb>,
     work_item: WorkItem,
     spatial_threshold: f32,
 }
 
 impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
-    pub fn new(
+    #[allow(clippy::clippy::too_many_arguments)]
+    pub(crate) fn new(
         builder: &'a SpatialSahBuilder<'a, T>,
         allocator: AtomicNodeStack<'a>,
         references: [UnsafeSliceWrapper<'a, SpatialReference>; 3],
         reference_count: &'a AtomicUsize,
         prim_indices: UnsafeSliceWrapper<'a, u32>,
-        accumulated_aabbs: UnsafeSliceWrapper<'a, AABB>,
+        accumulated_aabbs: UnsafeSliceWrapper<'a, Aabb>,
         work_item: WorkItem,
         spatial_threshold: f32,
     ) -> Self {
@@ -193,8 +194,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
             reference_count,
             prim_indices,
             accumulated_aabbs,
-            spatial_threshold,
             work_item,
+            spatial_threshold,
         }
     }
 
@@ -209,7 +210,7 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
 
                     if a_center < b_center {
                         std::cmp::Ordering::Less
-                    } else if a_center == b_center {
+                    } else if (a_center - b_center).abs() < 0.0001 {
                         std::cmp::Ordering::Equal
                     } else {
                         std::cmp::Ordering::Greater
@@ -221,15 +222,15 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         let mut best_split = ObjectSplit::default();
 
         for axis in 0..3 {
-            let mut aabb = AABB::empty();
+            let mut aabb = Aabb::empty();
             let mut i = end - 1;
             while i > begin {
                 aabb.grow_bb(&self.references[axis][i].aabb);
-                self.accumulated_aabbs.set(i, aabb.clone());
+                self.accumulated_aabbs.set(i, aabb);
                 i -= 1;
             }
 
-            aabb = AABB::empty();
+            aabb = Aabb::empty();
             for i in begin..(end - 1) {
                 aabb.grow_bb(&self.references[axis][i].aabb);
                 let cost = aabb.half_area() * (i + 1 - begin) as f32
@@ -253,8 +254,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         &mut self,
         right_begin: usize,
         right_end: usize,
-        left_box: &AABB,
-        right_box: &AABB,
+        left_box: &Aabb,
+        right_box: &Aabb,
         is_sorted: bool,
     ) -> (WorkItem, WorkItem) {
         let new_nodes = self.allocator.allocate().unwrap();
@@ -382,8 +383,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
 
         let mut bins = vec![
             SpatialBin {
-                aabb: AABB::empty(),
-                accumulated_aabb: AABB::empty(),
+                aabb: Aabb::empty(),
+                accumulated_aabb: Aabb::empty(),
                 entry: 0,
                 exit: 0,
             };
@@ -401,13 +402,13 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
             let last_bin = (bin_count - 1)
                 .min((inv_size * (reference.aabb.max[axis] - min)).max(0.0) as usize);
 
-            let mut current_aabb = reference.aabb.clone();
-            for j in first_bin..last_bin {
+            let mut current_aabb = reference.aabb;
+            for (j, bin) in bins[first_bin..last_bin].iter_mut().enumerate() {
                 let triangle = &self.builder.primitives[reference.prim_id as usize];
                 let (mut left_box, right_box) =
-                    triangle.split(axis, min + (j + 1) as f32 * bin_size);
+                    triangle.split(axis, min + (j + first_bin + 1) as f32 * bin_size);
                 left_box.shrink(&current_aabb);
-                bins[j].aabb.grow_bb(&left_box);
+                bin.aabb.grow_bb(&left_box);
                 current_aabb.shrink(&right_box);
             }
 
@@ -417,18 +418,18 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         }
 
         // Accumulate bounding boxes
-        let mut current_aabb = AABB::empty();
+        let mut current_aabb = Aabb::empty();
         let mut i = bin_count;
         while i > 0 {
             current_aabb.grow_bb(&bins[i - 1].aabb);
-            bins[i - 1].aabb = current_aabb.clone();
+            bins[i - 1].aabb = current_aabb;
             i -= 1;
         }
 
         // Sweep and compute SAH cost
         let mut left_count = 0;
         let mut right_count = end - begin;
-        let mut current_aabb = AABB::empty();
+        let mut current_aabb = Aabb::empty();
         let mut found = false;
         for i in 0..(bin_count - 1) {
             left_count += bins[i].entry;
@@ -462,7 +463,7 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
 
             for _ in 0..self.builder.binning_pass_count {
                 if let Some(next_bounds) =
-                self.run_binning_pass(&mut split, axis, begin, end, min, max)
+                    self.run_binning_pass(&mut split, axis, begin, end, min, max)
                 {
                     min = next_bounds.0;
                     max = next_bounds.1;
@@ -480,8 +481,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         let mut right_begin = self.work_item.end;
         let mut right_end = self.work_item.end;
 
-        let mut left_box = AABB::empty();
-        let mut right_box = AABB::empty();
+        let mut left_box = Aabb::empty();
+        let mut right_box = Aabb::empty();
 
         // Choosing the references that are sorted on the split axis
         // is more efficient than the others, since fewer swaps are
@@ -524,14 +525,15 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
             right_begin = left_end;
 
             // Recompute the left and right bounding boxes
-            left_box = AABB::empty();
-            right_box = AABB::empty();
+            left_box = Aabb::empty();
+            right_box = Aabb::empty();
 
-            for i in self.work_item.begin..left_end {
-                left_box.grow_bb(&references_to_split[i].aabb);
+            for r in &references_to_split[self.work_item.begin..left_end] {
+                left_box.grow_bb(&r.aabb);
             }
-            for i in left_end..self.work_item.end {
-                right_box.grow_bb(&references_to_split[i].aabb);
+
+            for r in &references_to_split[left_end..self.work_item.end] {
+                right_box.grow_bb(&r.aabb);
             }
         }
 
@@ -580,9 +582,9 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         }
 
         self.references[(split.axis + 1) % 3].as_mut()[self.work_item.begin..right_end]
-            .copy_from_slice(&references_to_split.as_ref()[self.work_item.begin..right_end]);
+            .copy_from_slice(&references_to_split[self.work_item.begin..right_end]);
         self.references[(split.axis + 2) % 3].as_mut()[self.work_item.begin..right_end]
-            .copy_from_slice(&references_to_split.as_ref()[self.work_item.begin..right_end]);
+            .copy_from_slice(&references_to_split[self.work_item.begin..right_end]);
 
         debug_assert_eq!(left_end, right_begin);
         debug_assert!(right_end <= self.work_item.split_end);
@@ -599,7 +601,7 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
         let prim_indices = self.prim_indices.clone();
         let references = self.references.clone();
 
-        let make_leaf = |node: &mut BVHNode, begin: usize, end: usize| {
+        let make_leaf = |node: &mut BvhNode, begin: usize, end: usize| {
             let prim_count = end - begin;
             let first_prim = reference_count.fetch_add(prim_count, SeqCst);
 
@@ -623,7 +625,7 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
         );
 
         let mut best_spatial_split = SpatialSplit::default();
-        let mut overlap = best_object_split.left_box.clone();
+        let mut overlap = best_object_split.left_box;
         overlap.shrink(&best_object_split.right_box);
         let overlap = overlap.area();
 
@@ -643,8 +645,8 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
                 use_spatial_split = false;
                 best_object_split.index = (self.work_item.begin + self.work_item.end) / 2;
                 best_object_split.axis = node.bounds.longest_axis();
-                best_object_split.left_box = AABB::empty();
-                best_object_split.right_box = AABB::empty();
+                best_object_split.left_box = Aabb::empty();
+                best_object_split.right_box = Aabb::empty();
 
                 for i in self.work_item.begin..best_object_split.index {
                     best_object_split
@@ -676,7 +678,7 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
         };
 
         let task_a = Self::new(
-            builder.clone(),
+            builder,
             allocator.clone(),
             references.clone(),
             reference_count,
@@ -710,7 +712,7 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
 }
 
 pub struct SpatialSahBuilder<'a, T: Primitive + SpatialTriangle> {
-    aabbs: &'a [AABB],
+    aabbs: &'a [Aabb],
     primitives: &'a [T],
 
     binning_pass_count: usize,
@@ -724,7 +726,7 @@ pub struct SpatialSahBuilder<'a, T: Primitive + SpatialTriangle> {
 }
 
 impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [AABB], primitives: &'a [T]) -> Self {
+    pub fn new(aabbs: &'a [Aabb], primitives: &'a [T]) -> Self {
         debug_assert_eq!(aabbs.len(), primitives.len());
 
         Self {
@@ -784,14 +786,14 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuilder<'a, T> {
 }
 
 impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a, T> {
-    fn build(self) -> BVH {
+    fn build(self) -> Bvh {
         let prim_count = self.aabbs.len();
         let max_reference_count = prim_count + (prim_count as f32 * self.split_factor) as usize;
         let reference_count = AtomicUsize::new(0);
 
-        let mut nodes = vec![BVHNode::new(); 2 * max_reference_count + 1];
-        let mut prim_indices = vec![0 as u32; max_reference_count];
-        let mut accumulated_bboxes = vec![AABB::empty(); max_reference_count];
+        let mut nodes = vec![BvhNode::new(); 2 * max_reference_count + 1];
+        let mut prim_indices = vec![0_u32; max_reference_count];
+        let mut accumulated_bboxes = vec![Aabb::empty(); max_reference_count];
 
         // The references storage containers
         let mut reference_data0 = vec![SpatialReference::default(); max_reference_count];
@@ -805,7 +807,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
             UnsafeSliceWrapper::new(reference_data2.as_mut_slice()),
         ];
 
-        let root_bounds = AABB::union_of_list(self.aabbs);
+        let root_bounds = Aabb::union_of_list(self.aabbs);
 
         // Compute the spatial split threshold
         let spatial_threshold = self.alpha * 2.0 * root_bounds.half_area();
@@ -813,7 +815,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         let (node_stack, first_node) = AtomicNodeStack::new(&node_count, nodes.as_mut_slice());
 
         #[cfg(feature = "wasm_support")]
-            references.iter().for_each(|r| {
+        references.iter().for_each(|r| {
             r.as_mut()[0..prim_count]
                 .iter_mut()
                 .enumerate()
@@ -825,7 +827,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         });
 
         #[cfg(not(feature = "wasm_support"))]
-            references.iter().par_bridge().for_each(|r| {
+        references.iter().par_bridge().for_each(|r| {
             r.as_mut()[0..prim_count]
                 .iter_mut()
                 .enumerate()
@@ -839,7 +841,7 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         let prim_wrapper = UnsafeSliceWrapper::new(prim_indices.as_mut());
         let accumulated_aabbs_wrapper = UnsafeSliceWrapper::new(accumulated_bboxes.as_mut());
         let task_spawner = TaskSpawner::new();
-        first_node.bounds = AABB::union_of_list(self.aabbs);
+        first_node.bounds = Aabb::union_of_list(self.aabbs);
 
         // Initialize the first task, this task will spawn subsequent tasks
         let root_task = SpatialSahBuildTask::new(
@@ -861,24 +863,24 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         );
 
         #[cfg(feature = "wasm_support")]
-            {
-                let mut stack = vec![root_task];
-                while let Some(task) = stack.pop() {
-                    if let Some(left_task, right_task) = task.run() {
-                        stack.push(left);
-                        stack.push(right);
-                    }
+        {
+            let mut stack = vec![root_task];
+            while let Some(task) = stack.pop() {
+                if let Some(left_task, right_task) = task.run() {
+                    stack.push(left);
+                    stack.push(right);
                 }
             }
+        }
 
         // Launch build task
         #[cfg(not(feature = "wasm_support"))]
-            task_spawner.run(root_task);
+        task_spawner.run(root_task);
 
-        nodes.resize(node_count.load(SeqCst), BVHNode::new());
+        nodes.resize(node_count.load(SeqCst), BvhNode::new());
 
         // Compose bvh
-        let mut bvh = BVH {
+        let mut bvh = Bvh {
             nodes,
             prim_indices,
             build_type: BuildType::Spatial,

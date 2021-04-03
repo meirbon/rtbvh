@@ -3,14 +3,14 @@ use crate::builders::*;
 use crate::bvh_node::*;
 use crate::mbvh_node::*;
 use crate::{aabb::Bounds, builders::BuildAlgorithm};
-use crate::{RayPacket4, AABB};
+use crate::{Aabb, RayPacket4};
 use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 pub trait Primitive: Debug + Copy + Send + Sync {
     fn center(&self) -> [f32; 3];
-    fn aabb(&self) -> AABB;
+    fn aabb(&self) -> Aabb;
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -22,36 +22,36 @@ pub enum BuildType {
 }
 
 pub struct Builder<'a, T: Primitive> {
-    pub aabbs: &'a [AABB],
+    pub aabbs: &'a [Aabb],
     pub primitives: &'a [T],
 }
 
 impl<'a, T: Primitive> Builder<'a, T> {
-    pub fn construct_spatial_sah(self) -> BVH
+    pub fn construct_spatial_sah(self) -> Bvh
     where
         T: SpatialTriangle,
     {
         spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives).build()
     }
 
-    pub fn construct_binned_sah(self) -> BVH {
+    pub fn construct_binned_sah(self) -> Bvh {
         binned_sah::BinnedSahBuilder::new(self.aabbs, self.primitives).build()
     }
 
-    pub fn construct_locally_ordered_clustered(self) -> BVH {
+    pub fn construct_locally_ordered_clustered(self) -> Bvh {
         locb::LocallyOrderedClusteringBuilder::new(self.aabbs, self.primitives).build()
     }
 }
 
 // A BVH structure with nodes and primitive indices
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BVH {
-    pub(crate) nodes: Vec<BVHNode>,
+pub struct Bvh {
+    pub(crate) nodes: Vec<BvhNode>,
     pub(crate) prim_indices: Vec<u32>,
     pub(crate) build_type: BuildType,
 }
 
-impl Default for BVH {
+impl Default for Bvh {
     fn default() -> Self {
         Self {
             nodes: Default::default(),
@@ -61,8 +61,8 @@ impl Default for BVH {
     }
 }
 
-impl BVH {
-    pub fn nodes(&self) -> &[BVHNode] {
+impl Bvh {
+    pub fn nodes(&self) -> &[BvhNode] {
         self.nodes.as_slice()
     }
 
@@ -78,10 +78,10 @@ impl BVH {
         self.prim_indices.len()
     }
 
-    pub fn refit(&mut self, new_aabbs: &[AABB]) {
+    pub fn refit(&mut self, new_aabbs: &[Aabb]) {
         for i in (0..self.nodes.len()).rev() {
             // Create new aabb
-            let mut aabb = AABB::new();
+            let mut aabb = Aabb::new();
 
             // Check if node is valid
             if let Some(left_first) = self.nodes[i].get_left_first() {
@@ -122,7 +122,7 @@ impl BVH {
         I: FnMut(usize, f32, f32) -> Option<(f32, R)>,
         R: Copy,
     {
-        BVHNode::traverse(
+        BvhNode::traverse(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -147,7 +147,7 @@ impl BVH {
     where
         I: FnMut(usize, f32, f32) -> Option<f32>,
     {
-        BVHNode::traverse_t(
+        BvhNode::traverse_t(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -173,7 +173,7 @@ impl BVH {
     where
         I: FnMut(usize, f32, f32) -> bool,
     {
-        BVHNode::occludes(
+        BvhNode::occludes(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -198,7 +198,7 @@ impl BVH {
     where
         I: Fn(usize, f32, f32) -> Option<(f32, u32)>,
     {
-        BVHNode::depth_test(
+        BvhNode::depth_test(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -215,7 +215,7 @@ impl BVH {
     where
         I: FnMut(usize, &mut RayPacket4),
     {
-        BVHNode::traverse4(
+        BvhNode::traverse4(
             self.nodes.as_slice(),
             self.prim_indices.as_slice(),
             packet,
@@ -223,7 +223,7 @@ impl BVH {
         );
     }
 
-    fn traverse_check(&self, cur_node: &BVHNode, checks: &mut [u8]) {
+    fn traverse_check(&self, cur_node: &BvhNode, checks: &mut [u8]) {
         if let Some(left_first) = cur_node.get_left_first() {
             if cur_node.is_leaf() {
                 for i in 0..cur_node.count {
@@ -249,37 +249,37 @@ impl BVH {
     /// Validates the current bvh for correctness in terms of primitive ids and
     /// tree structure
     pub fn validate(&self, prim_count: usize) {
-        let mut found_indices = vec![0 as u8; prim_count];
+        let mut found_indices = vec![0_u8; prim_count];
         self.traverse_check(&self.nodes[0], found_indices.as_mut());
 
-        for i in 0..found_indices.len() {
-            if found_indices[i] == 0 {
-                println!("prim ({}) not referenced", i);
+        for (i, index) in found_indices.iter().copied().enumerate() {
+            if index == 0 {
+                eprintln!("prim ({}) not referenced", i);
             }
         }
     }
 
-    pub fn as_raw_indices(self) -> Vec<u32> {
+    pub fn into_raw_indices(self) -> Vec<u32> {
         self.prim_indices
     }
 
-    pub fn as_raw_nodes(self) -> Vec<BVHNode> {
+    pub fn into_raw_nodes(self) -> Vec<BvhNode> {
         self.nodes
     }
 
-    pub fn as_raw(self) -> (Vec<BVHNode>, Vec<u32>) {
+    pub fn into_raw(self) -> (Vec<BvhNode>, Vec<u32>) {
         (self.nodes, self.prim_indices)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MBVH {
-    pub(crate) nodes: Vec<BVHNode>,
+pub struct Mbvh {
+    pub(crate) nodes: Vec<BvhNode>,
     pub(crate) m_nodes: Vec<MBVHNode>,
     pub(crate) prim_indices: Vec<u32>,
 }
 
-impl Default for MBVH {
+impl Default for Mbvh {
     fn default() -> Self {
         Self {
             nodes: Default::default(),
@@ -289,8 +289,8 @@ impl Default for MBVH {
     }
 }
 
-impl MBVH {
-    pub fn nodes(&self) -> &[BVHNode] {
+impl Mbvh {
+    pub fn nodes(&self) -> &[BvhNode] {
         self.nodes.as_slice()
     }
 
@@ -306,20 +306,19 @@ impl MBVH {
         self.prim_indices.len()
     }
 
-    pub fn construct_from_raw(nodes: &[BVHNode], prim_indices: &[u32]) -> Self {
-        debug_assert!(nodes.len() >= 1);
+    pub fn construct_from_raw(nodes: &[BvhNode], prim_indices: &[u32]) -> Self {
+        debug_assert!(!nodes.is_empty());
         let mut m_nodes = vec![MBVHNode::new(); nodes.len()];
         let mut pool_ptr = 1;
 
         if nodes.len() <= 4 {
-            for i in 0..nodes.len() {
-                let cur_node = &nodes[i];
-                m_nodes[0].set_bounds_bb(i, &cur_node.bounds);
-                m_nodes[0].children[i] = cur_node.left_first;
-                m_nodes[0].counts[i] = cur_node.count;
+            for (i, node) in nodes.iter().enumerate() {
+                m_nodes[0].set_bounds_bb(i, &node.bounds);
+                m_nodes[0].children[i] = node.left_first;
+                m_nodes[0].counts[i] = node.count;
             }
 
-            return MBVH {
+            return Mbvh {
                 nodes: nodes.to_vec(),
                 m_nodes,
                 prim_indices: prim_indices.to_vec(),
@@ -328,27 +327,26 @@ impl MBVH {
 
         MBVHNode::merge_nodes(0, 0, nodes, m_nodes.as_mut_slice(), &mut pool_ptr);
 
-        MBVH {
+        Mbvh {
             nodes: nodes.to_vec(),
             m_nodes,
             prim_indices: prim_indices.to_vec(),
         }
     }
 
-    pub fn construct(bvh: &BVH) -> Self {
-        debug_assert!(bvh.nodes.len() >= 1);
+    pub fn construct(bvh: &Bvh) -> Self {
+        debug_assert!(!bvh.nodes.is_empty());
         let mut m_nodes = vec![MBVHNode::new(); bvh.nodes.len()];
         let mut pool_ptr = 1;
 
         if bvh.nodes.len() <= 4 {
-            for i in 0..bvh.nodes.len() {
-                let cur_node = &bvh.nodes[i];
-                m_nodes[0].set_bounds_bb(i, &cur_node.bounds);
-                m_nodes[0].children[i] = cur_node.left_first;
-                m_nodes[0].counts[i] = cur_node.count;
+            for (i, node) in bvh.nodes.iter().enumerate() {
+                m_nodes[0].set_bounds_bb(i, &node.bounds);
+                m_nodes[0].children[i] = node.left_first;
+                m_nodes[0].counts[i] = node.count;
             }
 
-            return MBVH {
+            return Mbvh {
                 nodes: bvh.nodes.clone(),
                 m_nodes,
                 prim_indices: bvh.prim_indices.clone(),
@@ -363,7 +361,7 @@ impl MBVH {
             &mut pool_ptr,
         );
 
-        MBVH {
+        Mbvh {
             nodes: bvh.nodes.clone(),
             m_nodes,
             prim_indices: bvh.prim_indices.clone(),
@@ -487,33 +485,33 @@ impl MBVH {
         );
     }
 
-    pub fn as_raw_indices(self) -> Vec<u32> {
+    pub fn into_raw_indices(self) -> Vec<u32> {
         self.prim_indices
     }
 
-    pub fn as_raw_nodes(self) -> Vec<MBVHNode> {
+    pub fn into_raw_nodes(self) -> Vec<MBVHNode> {
         self.m_nodes
     }
 
-    pub fn as_raw(self) -> (Vec<MBVHNode>, Vec<u32>) {
+    pub fn into_raw(self) -> (Vec<MBVHNode>, Vec<u32>) {
         (self.m_nodes, self.prim_indices)
     }
 }
 
-impl From<BVH> for MBVH {
-    fn from(bvh: BVH) -> Self {
-        MBVH::construct(&bvh)
+impl From<Bvh> for Mbvh {
+    fn from(bvh: Bvh) -> Self {
+        Mbvh::construct(&bvh)
     }
 }
 
-impl Bounds for BVH {
-    fn bounds(&self) -> AABB {
-        self.nodes[0].bounds.clone()
+impl Bounds for Bvh {
+    fn bounds(&self) -> Aabb {
+        self.nodes[0].bounds
     }
 }
 
-impl Bounds for MBVH {
-    fn bounds(&self) -> AABB {
-        self.nodes[0].bounds.clone()
+impl Bounds for Mbvh {
+    fn bounds(&self) -> Aabb {
+        self.nodes[0].bounds
     }
 }

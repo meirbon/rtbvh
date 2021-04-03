@@ -14,7 +14,7 @@ pub fn round_up_log2(bits: u32, mut offset: u32) -> u32 {
         offset
     } else {
         while (1 << offset) < bits {
-            offset = offset + 1;
+            offset += 1;
         }
 
         offset
@@ -35,7 +35,7 @@ pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &
 pub fn shuffle_prims<T: Sized + Copy + Send + Sync>(primitives: &[T], indices: &[u32]) -> Vec<T> {
     (0..indices.len())
         .into_par_iter()
-        .map(|i| primitives[indices[i] as usize].clone())
+        .map(|i| primitives[indices[i] as usize])
         .collect()
 }
 
@@ -149,6 +149,7 @@ impl<'a, T: Sized> UnsafeSliceWrapper<'a, T> {
         self.slice
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn as_mut(&self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len()) }
     }
@@ -167,6 +168,7 @@ impl<'a, T: Sized> UnsafeSliceWrapper<'a, T> {
         self.as_mut().swap(a, b);
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn range(&self, start: usize, end: usize) -> &mut [T] {
         debug_assert!(start < end, "start: {}, end: {}", start, end);
         debug_assert!(
@@ -247,8 +249,7 @@ impl TaskSpawner {
         thread_count.fetch_add(1, Ordering::SeqCst);
         let mut sub_tasks = Vec::new();
 
-        let mut stack: Vec<T> = Vec::new();
-        stack.push(task);
+        let mut stack: Vec<T> = vec![task];
 
         while !stack.is_empty() {
             let work_item = stack.pop().unwrap();

@@ -2,27 +2,27 @@ use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-use crate::{RayPacket4, AABB};
+use crate::{Aabb, RayPacket4};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[repr(C)]
-pub struct BVHNode {
-    pub bounds: AABB,
+pub struct BvhNode {
+    pub bounds: Aabb,
     pub left_first: i32,
     pub count: i32,
 }
 
-impl Default for BVHNode {
+impl Default for BvhNode {
     fn default() -> Self {
         Self {
-            bounds: AABB::default(),
+            bounds: Aabb::default(),
             left_first: 0,
             count: 0,
         }
     }
 }
 
-impl Display for BVHNode {
+impl Display for BvhNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.bounds)
     }
@@ -30,30 +30,30 @@ impl Display for BVHNode {
 
 pub struct NewNodeInfo {
     pub left: usize,
-    pub left_box: AABB,
+    pub left_box: Aabb,
     pub left_count: i32,
     pub left_left_first: i32,
-    pub right_box: AABB,
+    pub right_box: Aabb,
     pub right_count: i32,
     pub right_left_first: i32,
 }
 
 pub struct NodeUpdatePayLoad {
     pub index: usize,
-    pub bounds: AABB,
+    pub bounds: Aabb,
     pub left_first: i32,
     pub count: i32,
 }
 
 #[allow(dead_code)]
-impl BVHNode {
+impl BvhNode {
     const BINS: usize = 7;
     const MAX_PRIMITIVES: i32 = 5;
     const MAX_DEPTH: u32 = 32;
 
-    pub fn new() -> BVHNode {
-        BVHNode {
-            bounds: AABB::new(),
+    pub fn new() -> BvhNode {
+        BvhNode {
+            bounds: Aabb::new(),
             left_first: -1,
             count: -1,
         }
@@ -128,7 +128,7 @@ impl BVHNode {
     }
 
     pub fn depth_test<I>(
-        tree: &[BVHNode],
+        tree: &[BvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -151,7 +151,10 @@ impl BVHNode {
         let mut stack_ptr: i32 = 0;
 
         while stack_ptr >= 0 {
-            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -159,9 +162,9 @@ impl BVHNode {
                 )
             };
 
-            depth = depth + 1;
+            depth += 1;
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
-            stack_ptr = stack_ptr - 1;
+            stack_ptr -= 1;
 
             if node.count > -1 {
                 // Leaf node
@@ -172,20 +175,17 @@ impl BVHNode {
                         depth += d as i32;
                     }
                 }
-            } else {
-                if let Some(left_first) = node.get_left_first() {
-                    let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
-                    let hit_right =
-                        tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
-                    let new_stack_ptr = Self::sort_nodes(
-                        hit_left,
-                        hit_right,
-                        hit_stack.as_mut(),
-                        stack_ptr,
-                        left_first,
-                    );
-                    stack_ptr = new_stack_ptr;
-                }
+            } else if let Some(left_first) = node.get_left_first() {
+                let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
+                let hit_right = tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
+                let new_stack_ptr = Self::sort_nodes(
+                    hit_left,
+                    hit_right,
+                    hit_stack.as_mut(),
+                    stack_ptr,
+                    left_first,
+                );
+                stack_ptr = new_stack_ptr;
             }
         }
 
@@ -193,7 +193,7 @@ impl BVHNode {
     }
 
     pub fn traverse<I, R>(
-        tree: &[BVHNode],
+        tree: &[BvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -210,9 +210,12 @@ impl BVHNode {
         let mut t = t_max;
         let mut hit_record = None;
 
-        let dir_inverse = Vec3A::one() / dir;
+        let dir_inverse = Vec3A::ONE / dir;
         while stack_ptr >= 0 {
-            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -221,7 +224,7 @@ impl BVHNode {
             };
 
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
-            stack_ptr = stack_ptr - 1;
+            stack_ptr -= 1;
 
             if node.is_leaf() {
                 // Leaf node
@@ -232,19 +235,16 @@ impl BVHNode {
                         hit_record = Some(new_hit);
                     }
                 }
-            } else {
-                if let Some(left_first) = node.get_left_first() {
-                    let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
-                    let hit_right =
-                        tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
-                    stack_ptr = Self::sort_nodes(
-                        hit_left,
-                        hit_right,
-                        hit_stack.as_mut(),
-                        stack_ptr,
-                        left_first,
-                    );
-                }
+            } else if let Some(left_first) = node.get_left_first() {
+                let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
+                let hit_right = tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
+                stack_ptr = Self::sort_nodes(
+                    hit_left,
+                    hit_right,
+                    hit_stack.as_mut(),
+                    stack_ptr,
+                    left_first,
+                );
             }
         }
 
@@ -252,7 +252,7 @@ impl BVHNode {
     }
 
     pub fn traverse_t<I>(
-        tree: &[BVHNode],
+        tree: &[BvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -270,7 +270,10 @@ impl BVHNode {
         let dir_inverse = Vec3A::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
-            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -279,7 +282,7 @@ impl BVHNode {
             };
 
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
-            stack_ptr = stack_ptr - 1;
+            stack_ptr -= 1;
 
             if node.count > -1 {
                 // Leaf node
@@ -289,19 +292,16 @@ impl BVHNode {
                         t = new_t;
                     }
                 }
-            } else {
-                if let Some(left_first) = node.get_left_first() {
-                    let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
-                    let hit_right =
-                        tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
-                    stack_ptr = Self::sort_nodes(
-                        hit_left,
-                        hit_right,
-                        hit_stack.as_mut(),
-                        stack_ptr,
-                        left_first,
-                    );
-                }
+            } else if let Some(left_first) = node.get_left_first() {
+                let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t);
+                let hit_right = tree[(left_first + 1) as usize].intersect(origin, dir_inverse, t);
+                stack_ptr = Self::sort_nodes(
+                    hit_left,
+                    hit_right,
+                    hit_stack.as_mut(),
+                    stack_ptr,
+                    left_first,
+                );
             }
         }
 
@@ -313,7 +313,7 @@ impl BVHNode {
     }
 
     pub fn occludes<I>(
-        tree: &[BVHNode],
+        tree: &[BvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -330,7 +330,10 @@ impl BVHNode {
         let dir_inverse = Vec3A::new(1.0, 1.0, 1.0) / dir;
         hit_stack[stack_ptr as usize] = 0;
         while stack_ptr >= 0 {
-            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -339,7 +342,7 @@ impl BVHNode {
             };
 
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
-            stack_ptr = stack_ptr - 1;
+            stack_ptr -= 1;
 
             if node.count > -1 {
                 // Leaf node
@@ -349,28 +352,26 @@ impl BVHNode {
                         return true;
                     }
                 }
-            } else {
-                if let Some(left_first) = node.get_left_first() {
-                    let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t_max);
-                    let hit_right = tree[(left_first + 1) as usize].bounds.intersect(
-                        origin,
-                        dir_inverse,
-                        t_max,
-                    );
-                    stack_ptr = Self::sort_nodes(
-                        hit_left,
-                        hit_right,
-                        hit_stack.as_mut(),
-                        stack_ptr,
-                        left_first,
-                    );
-                }
+            } else if let Some(left_first) = node.get_left_first() {
+                let hit_left = tree[left_first as usize].intersect(origin, dir_inverse, t_max);
+                let hit_right =
+                    tree[(left_first + 1) as usize]
+                        .bounds
+                        .intersect(origin, dir_inverse, t_max);
+                stack_ptr = Self::sort_nodes(
+                    hit_left,
+                    hit_right,
+                    hit_stack.as_mut(),
+                    stack_ptr,
+                    left_first,
+                );
             }
         }
 
         false
     }
 
+    #[inline]
     fn sort_nodes(
         left: Option<(f32, f32)>,
         right: Option<(f32, f32)>,
@@ -378,32 +379,30 @@ impl BVHNode {
         mut stack_ptr: i32,
         left_first: u32,
     ) -> i32 {
-        if left.is_some() & &right.is_some() {
-            let (t_near_left, _) = left.unwrap();
-            let (t_near_right, _) = right.unwrap();
-
+        if let (Some((t_near_left, _)), Some((t_near_right, _))) = (left, right) {
             if t_near_left < t_near_right {
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first as i32;
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first as i32 + 1;
             } else {
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first as i32 + 1;
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first as i32;
             }
         } else if left.is_some() {
-            stack_ptr = stack_ptr + 1;
+            stack_ptr += 1;
             hit_stack[stack_ptr as usize] = left_first as i32;
         } else if right.is_some() {
-            stack_ptr = stack_ptr + 1;
+            stack_ptr += 1;
             hit_stack[stack_ptr as usize] = left_first as i32 + 1;
         }
 
         stack_ptr
     }
 
+    #[inline]
     fn sort_nodes4(
         left: Option<[f32; 4]>,
         right: Option<[f32; 4]>,
@@ -412,26 +411,26 @@ impl BVHNode {
         left_first: u32,
     ) -> i32 {
         let left_first = left_first as i32;
-        if left.is_some() & &right.is_some() {
-            let t_near_left = Vec4::from(left.unwrap());
-            let t_near_right = Vec4::from(right.unwrap());
+        if let (Some(left), Some(right)) = (left, right) {
+            let t_near_left = Vec4::from(left);
+            let t_near_right = Vec4::from(right);
 
             if t_near_left.cmplt(t_near_right).bitmask() > 0 {
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first;
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first + 1;
             } else {
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first + 1;
-                stack_ptr = stack_ptr + 1;
+                stack_ptr += 1;
                 hit_stack[stack_ptr as usize] = left_first;
             }
         } else if left.is_some() {
-            stack_ptr = stack_ptr + 1;
+            stack_ptr += 1;
             hit_stack[stack_ptr as usize] = left_first;
         } else if right.is_some() {
-            stack_ptr = stack_ptr + 1;
+            stack_ptr += 1;
             hit_stack[stack_ptr as usize] = left_first + 1;
         }
 
@@ -439,7 +438,7 @@ impl BVHNode {
     }
 
     pub fn traverse4<I: FnMut(usize, &mut RayPacket4)>(
-        tree: &[BVHNode],
+        tree: &[BvhNode],
         prim_indices: &[u32],
         packet: &mut RayPacket4,
         mut intersection_test: I,
@@ -447,13 +446,16 @@ impl BVHNode {
         let mut hit_stack = [0; 64];
         let mut stack_ptr: i32 = 0;
 
-        let one = Vec4::one();
+        let one = Vec4::ONE;
         let inv_dir_x = one / Vec4::from(packet.direction_x);
         let inv_dir_y = one / Vec4::from(packet.direction_y);
         let inv_dir_z = one / Vec4::from(packet.direction_z);
 
         while stack_ptr >= 0 {
-            #[cfg(all(any(target_arch = "x86_64", target_arch = "x86"), not(feature = "wasm_support")))]
+            #[cfg(all(
+                any(target_arch = "x86_64", target_arch = "x86"),
+                not(feature = "wasm_support")
+            ))]
             unsafe {
                 core::arch::x86_64::_mm_prefetch(
                     tree.as_ptr().add(hit_stack[stack_ptr as usize] as usize) as *const i8,
@@ -462,7 +464,7 @@ impl BVHNode {
             };
 
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
-            stack_ptr = stack_ptr - 1;
+            stack_ptr -= 1;
 
             if node.count > -1 {
                 // Leaf node
@@ -470,21 +472,19 @@ impl BVHNode {
                     let prim_id = prim_indices[(node.left_first + i) as usize] as usize;
                     intersection_test(prim_id, packet);
                 }
-            } else {
-                if let Some(left_first) = node.get_left_first() {
-                    let hit_left = tree[left_first as usize]
-                        .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
-                    let hit_right = tree[(left_first + 1) as usize]
-                        .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
+            } else if let Some(left_first) = node.get_left_first() {
+                let hit_left = tree[left_first as usize]
+                    .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
+                let hit_right = tree[(left_first + 1) as usize]
+                    .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
 
-                    stack_ptr = Self::sort_nodes4(
-                        hit_left,
-                        hit_right,
-                        hit_stack.as_mut(),
-                        stack_ptr,
-                        left_first,
-                    );
-                }
+                stack_ptr = Self::sort_nodes4(
+                    hit_left,
+                    hit_right,
+                    hit_stack.as_mut(),
+                    stack_ptr,
+                    left_first,
+                );
             }
         }
     }

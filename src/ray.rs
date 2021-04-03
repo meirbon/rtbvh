@@ -21,9 +21,9 @@ impl<T: Into<[f32; 3]>> From<(T, T)> for Ray {
     }
 }
 
-impl<T: From<[f32; 3]>> Into<(T, T)> for Ray {
-    fn into(self) -> (T, T) {
-        (self.origin.into(), self.direction.into())
+impl<T: From<[f32; 3]>> From<Ray> for (T, T) {
+    fn from(r: Ray) -> Self {
+        (r.origin.into(), r.direction.into())
     }
 }
 
@@ -41,8 +41,8 @@ pub struct RayPacket4 {
     pub pixel_ids: [u32; 4],
 }
 
-impl RayPacket4 {
-    pub fn new() -> RayPacket4 {
+impl Default for RayPacket4 {
+    fn default() -> Self {
         Self {
             origin_x: [0.0; 4],
             origin_y: [0.0; 4],
@@ -53,6 +53,12 @@ impl RayPacket4 {
             t: [0.0; 4],
             pixel_ids: [0; 4],
         }
+    }
+}
+
+impl RayPacket4 {
+    pub fn new() -> RayPacket4 {
+        Self::default()
     }
 
     pub fn origin_xyz<T: From<[f32; 4]>>(&self) -> (T, T, T) {
@@ -128,8 +134,8 @@ impl Ray {
 
     pub fn get_point_at(&self, t: f32) -> [f32; 3] {
         let mut point = self.origin;
-        for i in 0..3 {
-            point[i] += self.direction[i] * t;
+        for (p, d) in point.iter_mut().zip(self.direction.iter().copied()) {
+            *p += d * t;
         }
         point
     }

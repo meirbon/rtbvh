@@ -1,4 +1,4 @@
-use crate::{BVHNode, BVH};
+use crate::{BvhNode, Bvh};
 
 use crate::utils::UnsafeSliceWrapper;
 use std::sync::atomic::AtomicUsize;
@@ -9,7 +9,7 @@ pub mod locb;
 pub mod spatial_sah;
 
 pub trait BuildAlgorithm {
-    fn build(self) -> BVH;
+    fn build(self) -> Bvh;
 }
 
 #[derive(Debug)]
@@ -32,20 +32,20 @@ impl From<u32> for BVHType {
 #[derive(Debug, Clone)]
 struct AtomicNodeStack<'a> {
     counter: &'a AtomicUsize,
-    nodes: UnsafeSliceWrapper<'a, BVHNode>,
+    nodes: UnsafeSliceWrapper<'a, BvhNode>,
 }
 
 #[derive(Debug)]
 struct AllocatedNodes<'a> {
     pub left: usize,
     pub right: usize,
-    pub left_node: &'a mut BVHNode,
-    pub right_node: &'a mut BVHNode,
+    pub left_node: &'a mut BvhNode,
+    pub right_node: &'a mut BvhNode,
 }
 
 #[allow(dead_code)]
 impl<'a> AtomicNodeStack<'a> {
-    pub fn new(counter: &'a AtomicUsize, nodes: &'a mut [BVHNode]) -> (Self, &'a mut BVHNode) {
+    pub fn new(counter: &'a AtomicUsize, nodes: &'a mut [BvhNode]) -> (Self, &'a mut BvhNode) {
         counter.store(1, SeqCst);
         let nodes = UnsafeSliceWrapper::new(nodes);
         let first_node = nodes.get_mut(0).unwrap();
@@ -56,27 +56,22 @@ impl<'a> AtomicNodeStack<'a> {
         let left = self.counter.fetch_add(2, SeqCst);
         let right = left + 1;
 
-        let left_node = self.nodes.get_mut(left);
-        let right_node = self.nodes.get_mut(right);
+        let left_node = self.nodes.get_mut(left)?;
+        let right_node = self.nodes.get_mut(right)?;
 
-        if left_node.is_none() || right_node.is_none() {
-            None
-        } else {
-            let (left_node, right_node) = (left_node.unwrap(), right_node.unwrap());
-            Some(AllocatedNodes {
-                left,
-                right,
-                left_node,
-                right_node,
-            })
-        }
+        Some(AllocatedNodes {
+            left,
+            right,
+            left_node,
+            right_node,
+        })
     }
 
-    pub fn get(&self, idx: usize) -> Option<&'a BVHNode> {
+    pub fn get(&self, idx: usize) -> Option<&'a BvhNode> {
         self.nodes.get(idx)
     }
 
-    pub fn get_mut(&self, idx: usize) -> Option<&'a mut BVHNode> {
+    pub fn get_mut(&self, idx: usize) -> Option<&'a mut BvhNode> {
         self.nodes.get_mut(idx)
     }
 }

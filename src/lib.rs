@@ -17,7 +17,7 @@ pub use ray::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{spatial_sah::SpatialTriangle, Builder, Primitive, AABB};
+    use crate::{spatial_sah::SpatialTriangle, Aabb, Builder, Primitive};
 
     #[derive(Debug, Copy, Clone)]
     struct Triangle {
@@ -28,15 +28,15 @@ mod tests {
 
     impl Primitive for Triangle {
         fn center(&self) -> [f32; 3] {
-            let mut result = [0.0; 3];
-            for i in 0..3 {
-                result[i] = (self.vertex0[i] + self.vertex1[i] + self.vertex2[i]) / 3.0;
-            }
-            result
+            [
+                (self.vertex0[0] + self.vertex1[0] + self.vertex2[0]) / 3.0,
+                (self.vertex0[1] + self.vertex1[1] + self.vertex2[1]) / 3.0,
+                (self.vertex0[2] + self.vertex1[2] + self.vertex2[2]) / 3.0,
+            ]
         }
 
-        fn aabb(&self) -> crate::AABB {
-            let mut aabb = crate::AABB::new();
+        fn aabb(&self) -> crate::Aabb {
+            let mut aabb = crate::Aabb::new();
             aabb.grow(self.vertex0);
             aabb.grow(self.vertex1);
             aabb.grow(self.vertex2);
@@ -79,7 +79,7 @@ mod tests {
                 vertex2: vertices[3],
             },
         ];
-        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<AABB>>();
+        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),
@@ -108,7 +108,7 @@ mod tests {
                 vertex2: vertices[3],
             },
         ];
-        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<AABB>>();
+        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),
@@ -137,7 +137,7 @@ mod tests {
                 vertex2: vertices[3],
             },
         ];
-        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<AABB>>();
+        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),

@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use crate::{utils::*, *};
 use glam::*;
 use std::fmt::Debug;
@@ -11,7 +10,7 @@ use rayon::prelude::*;
 pub fn morton_split(int: u32) -> u32 {
     let log_bits = round_up_log2(std::mem::size_of::<u32>() as u32 * 8, 0);
     let mut x = int as usize;
-    let mut mask = !(0 as usize);
+    let mut mask = !0_usize;
     let mut i = log_bits as usize;
     let mut n = 1 << log_bits as usize;
     while i > 0 {
@@ -34,7 +33,7 @@ pub struct MortonEncoder {
 impl MortonEncoder {
     pub const MAX_GRID_DIM: usize = 1 << (std::mem::size_of::<u32>() * 8 / 3);
 
-    pub fn new(aabb: &AABB, grid_dim: usize) -> MortonEncoder {
+    pub fn new(aabb: &Aabb, grid_dim: usize) -> MortonEncoder {
         debug_assert!(grid_dim <= Self::MAX_GRID_DIM);
         let world_to_grid = grid_dim as f32 * (1.0 / aabb.diagonal::<Vec3>());
         let grid_offset = -Vec3::from(aabb.min) * world_to_grid;
@@ -63,7 +62,7 @@ impl MortonEncoder {
 
     pub fn get_sorted_indices<T: Primitive>(
         &self,
-        aabbs: &[AABB],
+        aabbs: &[Aabb],
         primitives: &[T],
     ) -> (Vec<u32>, Vec<u32>) {
         debug_assert_eq!(aabbs.len(), primitives.len());
