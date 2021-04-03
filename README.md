@@ -13,15 +13,27 @@ This library emits a C/C++ library which is used in my [hobby renderer](https://
 ## Performance
 In a scene with a teapot of ~6300 triangles, my MacBook Pro with an 8-core i9 9980HK achieves the following performance:
 ```
+Bvh construction with spatial_sah type of 6320 primitives took 33.324 ms
 Single-threaded rays: 1.000.000 rays in 192.859 ms, 5.1851354 million rays per second
 16 threads rays: 1.000.000 rays in 22.546 ms, 44.353767 million rays per second
 Single-threaded packets: 1.000.000 rays in 42.497 ms, 23.531073 million rays per second
 16 threads packets: 1.000.000 rays in 4.992 ms, 200.32051 million rays per second
 ```
 
+An AMD 12-core 3900x with 3600 MHz RAM achieves the following performance:
+```
+Bvh construction with spatial_sah type of 6320 primitives took 21.489 ms
+Single-threaded rays: 1.000.000 rays in 188.951 ms, 5.2923775 million rays per second
+24 threads rays: 1.000.000 rays in 14.228 ms, 70.28395 million rays per second
+Single-threaded packets: 1.000.000 rays in 36.914 ms, 27.089993 million rays per second
+24 threads packets: 1.000.000 rays in 3.201 ms, 312.40237 million rays per second
+```
+
 ## Usage
+
 ```rust
 use rtbvh::*;
+
 #[derive(Debug, Copy, Clone)]
 struct Triangle {
     vertex0: [f32; 3],
@@ -80,7 +92,9 @@ let primitives: Vec<Triangle> = vec![
         vertex2: vertices[3],
     },
 ];
+
 let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<AABB>>();
+
 let builder = Builder {
     aabbs: aabbs.as_slice(),
     primitives: primitives.as_slice(),
