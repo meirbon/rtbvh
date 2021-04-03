@@ -13,17 +13,17 @@ pub trait BuildAlgorithm {
 }
 
 #[derive(Debug)]
-pub enum BVHType {
+pub enum BvhType {
     LocallyOrderedClustered = 0,
     BinnedSAH = 1,
 }
 
-impl From<u32> for BVHType {
+impl From<u32> for BvhType {
     fn from(i: u32) -> Self {
         match i {
-            0 => BVHType::LocallyOrderedClustered,
-            1 => BVHType::BinnedSAH,
-            _ => BVHType::BinnedSAH,
+            0 => BvhType::LocallyOrderedClustered,
+            1 => BvhType::BinnedSAH,
+            _ => BvhType::BinnedSAH,
         }
     }
 }

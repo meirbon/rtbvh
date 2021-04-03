@@ -377,7 +377,7 @@ impl crate::Primitive for Aabb {
 /// Creates an AABB from a list of vertices
 macro_rules! aabb {
     ($($x:expr),*) => {{
-        let mut bb = AABB::empty();
+        let mut bb = Aabb::empty();
         $(
             bb.grow($x);
         )*

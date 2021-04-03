@@ -275,7 +275,7 @@ impl Bvh {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mbvh {
     pub(crate) nodes: Vec<BvhNode>,
-    pub(crate) m_nodes: Vec<MBVHNode>,
+    pub(crate) m_nodes: Vec<MbvhNode>,
     pub(crate) prim_indices: Vec<u32>,
 }
 
@@ -294,7 +294,7 @@ impl Mbvh {
         self.nodes.as_slice()
     }
 
-    pub fn quad_nodes(&self) -> &[MBVHNode] {
+    pub fn quad_nodes(&self) -> &[MbvhNode] {
         self.m_nodes.as_slice()
     }
 
@@ -308,7 +308,7 @@ impl Mbvh {
 
     pub fn construct_from_raw(nodes: &[BvhNode], prim_indices: &[u32]) -> Self {
         debug_assert!(!nodes.is_empty());
-        let mut m_nodes = vec![MBVHNode::new(); nodes.len()];
+        let mut m_nodes = vec![MbvhNode::new(); nodes.len()];
         let mut pool_ptr = 1;
 
         if nodes.len() <= 4 {
@@ -325,7 +325,7 @@ impl Mbvh {
             };
         }
 
-        MBVHNode::merge_nodes(0, 0, nodes, m_nodes.as_mut_slice(), &mut pool_ptr);
+        MbvhNode::merge_nodes(0, 0, nodes, m_nodes.as_mut_slice(), &mut pool_ptr);
 
         Mbvh {
             nodes: nodes.to_vec(),
@@ -336,7 +336,7 @@ impl Mbvh {
 
     pub fn construct(bvh: &Bvh) -> Self {
         debug_assert!(!bvh.nodes.is_empty());
-        let mut m_nodes = vec![MBVHNode::new(); bvh.nodes.len()];
+        let mut m_nodes = vec![MbvhNode::new(); bvh.nodes.len()];
         let mut pool_ptr = 1;
 
         if bvh.nodes.len() <= 4 {
@@ -353,7 +353,7 @@ impl Mbvh {
             };
         }
 
-        MBVHNode::merge_nodes(
+        MbvhNode::merge_nodes(
             0,
             0,
             bvh.nodes.as_slice(),
@@ -384,7 +384,7 @@ impl Mbvh {
         I: FnMut(usize, f32, f32) -> Option<(f32, R)>,
         R: Copy,
     {
-        MBVHNode::traverse(
+        MbvhNode::traverse(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -409,7 +409,7 @@ impl Mbvh {
     where
         I: FnMut(usize, f32, f32) -> Option<f32>,
     {
-        MBVHNode::traverse_t(
+        MbvhNode::traverse_t(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -435,7 +435,7 @@ impl Mbvh {
     where
         I: FnMut(usize, f32, f32) -> bool,
     {
-        MBVHNode::occludes(
+        MbvhNode::occludes(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -460,7 +460,7 @@ impl Mbvh {
     where
         I: Fn(usize, f32, f32) -> Option<(f32, u32)>,
     {
-        MBVHNode::depth_test(
+        MbvhNode::depth_test(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
             Vec3A::from(*origin),
@@ -477,7 +477,7 @@ impl Mbvh {
     where
         I: FnMut(usize, &mut RayPacket4),
     {
-        MBVHNode::traverse4(
+        MbvhNode::traverse4(
             self.m_nodes.as_slice(),
             self.prim_indices.as_slice(),
             packet,
@@ -489,11 +489,11 @@ impl Mbvh {
         self.prim_indices
     }
 
-    pub fn into_raw_nodes(self) -> Vec<MBVHNode> {
+    pub fn into_raw_nodes(self) -> Vec<MbvhNode> {
         self.m_nodes
     }
 
-    pub fn into_raw(self) -> (Vec<MBVHNode>, Vec<u32>) {
+    pub fn into_raw(self) -> (Vec<MbvhNode>, Vec<u32>) {
         (self.m_nodes, self.prim_indices)
     }
 }

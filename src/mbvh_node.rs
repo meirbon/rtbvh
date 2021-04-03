@@ -11,7 +11,7 @@ struct MBVHHit {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[repr(C)]
-pub struct MBVHNode {
+pub struct MbvhNode {
     min_x: [f32; 4],
     max_x: [f32; 4],
     min_y: [f32; 4],
@@ -22,9 +22,9 @@ pub struct MBVHNode {
     pub counts: [i32; 4],
 }
 
-impl std::default::Default for MBVHNode {
+impl std::default::Default for MbvhNode {
     fn default() -> Self {
-        MBVHNode {
+        MbvhNode {
             min_x: [0.0; 4],
             max_x: [0.0; 4],
             min_y: [0.0; 4],
@@ -37,8 +37,8 @@ impl std::default::Default for MBVHNode {
     }
 }
 
-impl MBVHNode {
-    pub fn new() -> MBVHNode {
+impl MbvhNode {
+    pub fn new() -> MbvhNode {
         let min_x = [1e34; 4];
         let min_y = [1e34; 4];
         let min_z = [1e34; 4];
@@ -50,7 +50,7 @@ impl MBVHNode {
         let children = [-1; 4];
         let counts = [-1; 4];
 
-        MBVHNode {
+        MbvhNode {
             min_x,
             max_x,
             min_y,
@@ -290,7 +290,7 @@ impl MBVHNode {
 
     #[inline(always)]
     pub fn traverse<I, R>(
-        tree: &[MBVHNode],
+        tree: &[MbvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -367,7 +367,7 @@ impl MBVHNode {
 
     #[inline(always)]
     pub fn traverse_t<I>(
-        tree: &[MBVHNode],
+        tree: &[MbvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -431,7 +431,7 @@ impl MBVHNode {
 
     #[inline(always)]
     pub fn occludes<I>(
-        tree: &[MBVHNode],
+        tree: &[MbvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -491,7 +491,7 @@ impl MBVHNode {
 
     #[inline(always)]
     pub fn depth_test<I>(
-        tree: &[MBVHNode],
+        tree: &[MbvhNode],
         prim_indices: &[u32],
         origin: Vec3A,
         dir: Vec3A,
@@ -556,7 +556,7 @@ impl MBVHNode {
 
     #[inline(always)]
     pub fn traverse4<I: FnMut(usize, &mut RayPacket4)>(
-        tree: &[MBVHNode],
+        tree: &[MbvhNode],
         prim_indices: &[u32],
         packet: &mut RayPacket4,
         mut intersection_test: I,
@@ -624,7 +624,7 @@ impl MBVHNode {
         m_index: usize,
         cur_node: usize,
         bvh_pool: &[BvhNode],
-        mbvh_pool: &mut [MBVHNode],
+        mbvh_pool: &mut [MbvhNode],
         pool_ptr: &mut usize,
     ) {
         let cur_node = &bvh_pool[cur_node];

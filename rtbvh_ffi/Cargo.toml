@@ -12,7 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rtbvh = { path = "../" }
-glam = "0.11"
+glam = "0.13"
+lazy_static = "1.4.0"
 
 [build-dependencies]
-cbindgen = "0.16"
+cbindgen = "0.18"
