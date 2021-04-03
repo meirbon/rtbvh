@@ -1,64 +1,148 @@
 use glam::*;
 use serde::{Deserialize, Serialize};
-use std::default::Default;
 use std::fmt::{Display, Formatter};
+use std::{default::Default, fmt::Debug};
 
 use crate::RayPacket4;
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[repr(C)]
-pub struct Aabb {
+pub struct Aabb<Extra: Debug + Copy = i32> {
     pub min: [f32; 3],
+    pub extra1: Extra,
     pub max: [f32; 3],
+    pub extra2: Extra,
 }
 
-pub trait Bounds {
-    fn bounds(&self) -> Aabb;
+pub trait Bounds<E: Debug + Copy = i32> {
+    fn bounds(&self) -> Aabb<E>;
 }
 
-impl Default for Aabb {
+impl<E: Debug + Copy> Default for Aabb<E>
+where
+    E: Default,
+{
     fn default() -> Self {
         Aabb {
             min: [0.0; 3],
+            extra1: Default::default(),
             max: [0.0; 3],
+            extra2: Default::default(),
         }
     }
 }
 
-impl Display for Aabb {
+impl<E: Debug + Copy> Display for Aabb<E>
+where
+    E: Display,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let min = Vec3A::from(self.min);
         let max = Vec3A::from(self.max);
-        write!(f, "(min: {}, max: {}", min, max)
+        write!(
+            f,
+            "(min: {}, extra1: {}, max: {}, extra2: {}",
+            min, self.extra1, max, self.extra2
+        )
+    }
+}
+
+impl<E: Debug + Copy + Default> Aabb<E> {
+    #[inline]
+    pub fn new() -> Self {
+        Aabb {
+            min: [1e34; 3],
+            max: [-1e34; 3],
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn full() -> Self {
+        Aabb {
+            min: [-1e34; 3],
+            max: [1e34; 3],
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn empty() -> Self {
+        Self {
+            min: [1e34; 3],
+            max: [-1e34; 3],
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn union_of(&self, bb: &Self) -> Self {
+        let (min, max) = self.points::<Vec3A>();
+        let (b_min, b_max) = bb.points::<Vec3A>();
+
+        let new_min = min.min(b_min);
+        let new_max = max.max(b_max);
+
+        Self {
+            min: new_min.into(),
+            max: new_max.into(),
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn intersection(&self, bb: &Self) -> Self {
+        let (min, max) = self.points::<Vec3A>();
+        let (b_min, b_max) = bb.points::<Vec3A>();
+
+        let new_min = min.max(b_min);
+        let new_max = max.min(b_max);
+
+        Self {
+            min: new_min.into(),
+            max: new_max.into(),
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn from_points(points: &[Vec3A]) -> Self {
+        let mut aabb = Self::empty();
+        for point in points {
+            aabb.grow(*point);
+        }
+        aabb.offset_by(1e-5);
+        aabb
+    }
+
+    #[inline]
+    pub fn transformed<T: Into<[f32; 16]>>(&self, transform: T) -> Self {
+        let transform: Mat4 = Mat4::from_cols_array(&transform.into());
+        let mut corners: [Vec3A; 8] = self.all_corners();
+        for c in corners.iter_mut() {
+            let corner: Vec4 = transform * c.extend(1.0);
+            *c = Vec3A::new(corner.x, corner.y, corner.z);
+        }
+
+        Self::from_points(&corners)
+    }
+
+    #[inline]
+    pub fn union_of_list(aabbs: &[Self]) -> Self {
+        let mut aabb = Self::new();
+        for bb in aabbs {
+            aabb.grow_bb(bb);
+        }
+        aabb.with_offset(0.0001)
+    }
+
+    #[inline]
+    pub fn transform<T: Into<[f32; 16]>>(&mut self, transform: T) {
+        *self = self.transformed(transform);
     }
 }
 
 #[allow(dead_code)]
-impl Aabb {
-    #[inline]
-    pub fn new() -> Aabb {
-        Aabb {
-            min: [1e34; 3],
-            max: [-1e34; 3],
-        }
-    }
-
-    #[inline]
-    pub fn full() -> Aabb {
-        Aabb {
-            min: [-1e34; 3],
-            max: [1e34; 3],
-        }
-    }
-
-    #[inline]
-    pub fn empty() -> Aabb {
-        Aabb {
-            min: [1e34; 3],
-            max: [-1e34; 3],
-        }
-    }
-
+impl<E: Debug + Copy> Aabb<E> {
     pub fn is_valid(&self) -> bool {
         Vec3A::from(self.min).cmple(self.max.into()).all()
     }
@@ -147,7 +231,7 @@ impl Aabb {
     }
 
     #[inline]
-    pub fn grow_bb(&mut self, aabb: &Aabb) {
+    pub fn grow_bb(&mut self, aabb: &Self) {
         let (min, max) = self.points::<Vec3A>();
         let (a_min, a_max) = aabb.points::<Vec3A>();
 
@@ -159,7 +243,7 @@ impl Aabb {
     }
 
     #[inline]
-    pub fn grow_bbs(&mut self, aabbs: &[Aabb]) {
+    pub fn grow_bbs(&mut self, aabbs: &[Self]) {
         let (mut min, mut max) = self.points::<Vec3A>();
         for bb in aabbs {
             let (a_min, a_max) = bb.points::<Vec3A>();
@@ -172,7 +256,7 @@ impl Aabb {
     }
 
     #[inline]
-    pub fn shrink(&mut self, aabb: &Aabb) {
+    pub fn shrink(&mut self, aabb: &Self) {
         let (min, max) = self.points::<Vec3A>();
         let (a_min, a_max) = aabb.points::<Vec3A>();
 
@@ -206,34 +290,6 @@ impl Aabb {
 
         self.min = min.into();
         self.max = max.into();
-    }
-
-    #[inline]
-    pub fn union_of(&self, bb: &Aabb) -> Aabb {
-        let (min, max) = self.points::<Vec3A>();
-        let (b_min, b_max) = bb.points::<Vec3A>();
-
-        let new_min = min.min(b_min);
-        let new_max = max.max(b_max);
-
-        Aabb {
-            min: new_min.into(),
-            max: new_max.into(),
-        }
-    }
-
-    #[inline]
-    pub fn intersection(&self, bb: &Aabb) -> Aabb {
-        let (min, max) = self.points::<Vec3A>();
-        let (b_min, b_max) = bb.points::<Vec3A>();
-
-        let new_min = min.max(b_min);
-        let new_max = max.min(b_max);
-
-        Aabb {
-            min: new_min.into(),
-            max: new_max.into(),
-        }
     }
 
     #[inline]
@@ -307,35 +363,8 @@ impl Aabb {
     }
 
     #[inline]
-    pub fn from_points(points: &[Vec3A]) -> Aabb {
-        let mut aabb = Aabb::empty();
-        for point in points {
-            aabb.grow(*point);
-        }
-        aabb.offset_by(1e-5);
-        aabb
-    }
-
-    #[inline]
-    pub fn transformed<T: Into<[f32; 16]>>(&self, transform: T) -> Aabb {
-        let transform: Mat4 = Mat4::from_cols_array(&transform.into());
-        let mut corners: [Vec3A; 8] = self.all_corners();
-        for c in corners.iter_mut() {
-            let corner: Vec4 = transform * c.extend(1.0);
-            *c = Vec3A::new(corner.x, corner.y, corner.z);
-        }
-
-        Aabb::from_points(&corners)
-    }
-
-    #[inline]
     pub fn points<T: From<[f32; 3]>>(&self) -> (T, T) {
         (self.min.into(), self.max.into())
-    }
-
-    #[inline]
-    pub fn transform<T: Into<[f32; 16]>>(&mut self, transform: T) {
-        *self = self.transformed(transform);
     }
 
     #[inline]
@@ -348,44 +377,36 @@ impl Aabb {
     pub fn longest_extent(&self) -> f32 {
         self.diagonal::<Vec3A>()[self.longest_axis()]
     }
-
-    #[inline]
-    pub fn union_of_list(aabbs: &[Aabb]) -> Aabb {
-        let mut aabb = Aabb::new();
-        for bb in aabbs {
-            aabb.grow_bb(bb);
-        }
-        aabb.with_offset(0.0001)
-    }
 }
 
-impl<T: Into<[f32; 3]>> From<(T, T)> for Aabb {
+impl<E: Debug + Copy + Send + Sync + Default, T: Into<[f32; 3]>> From<(T, T)> for Aabb<E> {
     fn from((min, max): (T, T)) -> Self {
         Self {
             min: min.into(),
             max: max.into(),
+            ..Default::default()
         }
     }
 }
 
-impl<T: From<[f32; 3]>> From<Aabb> for (T, T) {
-    fn from(bb: Aabb) -> Self {
+impl<E: Debug + Copy + Send + Sync + Default, T: From<[f32; 3]>> From<Aabb<E>> for (T, T) {
+    fn from(bb: Aabb<E>) -> Self {
         (T::from(bb.min), T::from(bb.max))
     }
 }
 
-impl Bounds for Aabb {
-    fn bounds(&self) -> Aabb {
+impl<E: Debug + Copy> Bounds<E> for Aabb<E> {
+    fn bounds(&self) -> Aabb<E> {
         *self
     }
 }
 
-impl crate::Primitive for Aabb {
+impl<E: Debug + Copy + Send + Sync> crate::Primitive<E> for Aabb<E> {
     fn center(&self) -> [f32; 3] {
         self.center()
     }
 
-    fn aabb(&self) -> Aabb {
+    fn aabb(&self) -> Self {
         *self
     }
 }

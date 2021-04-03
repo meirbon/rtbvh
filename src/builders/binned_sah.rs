@@ -30,7 +30,7 @@ impl Default for SahSplit {
     }
 }
 
-struct BinnedSahBuildTask<'a, T: Primitive> {
+struct BinnedSahBuildTask<'a, T: Primitive<i32>> {
     bins_per_axis: [Vec<SahBin>; 3],
     builder: &'a BinnedSahBuilder<'a, T>,
     allocator: AtomicNodeStack<'a>,
@@ -42,7 +42,7 @@ struct BinnedSahBuildTask<'a, T: Primitive> {
     pub depth: usize,
 }
 
-impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
     pub fn new(
         builder: &'a BinnedSahBuilder<'a, T>,
         allocator: AtomicNodeStack<'a>,
@@ -113,7 +113,7 @@ impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
     #[inline]
     fn compute_bin_index(
         center: [f32; 3],
@@ -127,13 +127,13 @@ impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> Task for BinnedSahBuildTask<'a, T> {
+impl<'a, T: Primitive<i32>> Task for BinnedSahBuildTask<'a, T> {
     fn run(mut self) -> Option<(Self, Self)> {
         self.node.bounds.offset_by(0.0001);
         let make_leaf = |node: &mut BvhNode, begin: usize, end: usize| {
             node.bounds.offset_by(0.0001);
-            node.left_first = begin as i32;
-            node.count = (end - begin) as i32;
+            node.set_left_first(Some(begin as u32));
+            node.set_count(Some((end - begin) as u32));
         };
 
         if self.work_size() <= 1 || self.depth >= self.builder.max_depth {
@@ -221,8 +221,8 @@ impl<'a, T: Primitive> Task for BinnedSahBuildTask<'a, T> {
         if begin_right > self.begin && begin_right < self.end {
             // Allocate two nodes
             let new_nodes = self.allocator.allocate().unwrap();
-            self.node.left_first = new_nodes.left as i32;
-            self.node.count = -1;
+            self.node.set_left_first(Some(new_nodes.left as u32));
+            self.node.set_count(None);
 
             // Compute the bounding boxes
             let mut left_box = Aabb::empty();
@@ -289,8 +289,8 @@ impl<'a, T: Primitive> Task for BinnedSahBuildTask<'a, T> {
     }
 }
 
-pub struct BinnedSahBuilder<'a, T: Primitive> {
-    aabbs: &'a [Aabb],
+pub struct BinnedSahBuilder<'a, T: Primitive<i32>> {
+    aabbs: &'a [Aabb<i32>],
     primitives: &'a [T],
     max_depth: usize,
     bin_count: usize,
@@ -298,8 +298,8 @@ pub struct BinnedSahBuilder<'a, T: Primitive> {
     traversal_cost: f32,
 }
 
-impl<'a, T: Primitive> BinnedSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb], primitives: &'a [T]) -> Self {
+impl<'a, T: Primitive<i32>> BinnedSahBuilder<'a, T> {
+    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
         debug_assert_eq!(aabbs.len(), primitives.len());
         Self {
             aabbs,
@@ -336,7 +336,7 @@ impl<'a, T: Primitive> BinnedSahBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> BuildAlgorithm for BinnedSahBuilder<'a, T> {
+impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
     fn build(self) -> Bvh {
         let prim_count = self.aabbs.len();
         let mut nodes = vec![BvhNode::new(); prim_count * 2 - 1];

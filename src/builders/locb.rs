@@ -5,16 +5,16 @@ use builders::BuildAlgorithm;
 use glam::Vec3A;
 use rayon::prelude::*;
 
-pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive> {
-    aabbs: &'a [Aabb],
+pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive<i32>> {
+    aabbs: &'a [Aabb<i32>],
     primitives: &'a [T],
     encoder: MortonEncoder,
     world_bounds: Aabb,
     search_radius: usize,
 }
 
-impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb], primitives: &'a [T]) -> Self {
+impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
+    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
         let world_bounds = Aabb::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
@@ -199,8 +199,8 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                         .unwrap();
                     let first_child = children_begin + (merged_index[i] as usize - 1) * 2;
                     unmerged_node.bounds = input[j].bounds.union_of(&input[i].bounds);
-                    unmerged_node.count = -1;
-                    unmerged_node.left_first = first_child as i32;
+                    unmerged_node.set_count(None);
+                    unmerged_node.set_left_first(Some(first_child as u32));
 
                     par_output.set(first_child, input[i].clone());
                     par_output.set(first_child + 1, input[j].clone());
@@ -223,8 +223,8 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
                         .unwrap();
                     let first_child = children_begin + (merged_index[i] as usize - 1) * 2;
                     unmerged_node.bounds = input[j].bounds.union_of(&input[i].bounds);
-                    unmerged_node.count = -1;
-                    unmerged_node.left_first = first_child as i32;
+                    unmerged_node.set_count(None);
+                    unmerged_node.set_left_first(Some(first_child as u32));
 
                     par_output.set(first_child + 0, input[i].clone());
                     par_output.set(first_child + 1, input[j].clone());
@@ -244,7 +244,9 @@ impl<'a, T: Primitive> LocallyOrderedClusteringBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T> {
+impl<'a, T: Primitive<i32>> BuildAlgorithm
+    for LocallyOrderedClusteringBuilder<'a, T>
+{
     fn build(self) -> Bvh {
         debug_assert!(!self.aabbs.is_empty());
 
@@ -254,9 +256,9 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
             return Bvh {
                 nodes: vec![BvhNode {
                     bounds: self.world_bounds,
-                    left_first: 0,
-                    count: prim_count as i32,
-                }],
+                }
+                .with_left_first(Some(0))
+                .with_count(Some(prim_count as u32))],
                 prim_indices: (0..prim_count).into_iter().map(|i| i as u32).collect(),
                 build_type: BuildType::LocallyOrderedClustered,
             };
@@ -268,9 +270,9 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
         let mut nodes = vec![
             BvhNode {
                 bounds: (Vec3A::ZERO, Vec3A::ZERO).into(),
-                count: -1,
-                left_first: 0,
-            };
+            }
+            .with_count(None)
+            .with_left_first(Some(0));
             node_count
         ];
         let mut nodes_copy = nodes.clone();
@@ -283,8 +285,8 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
         for i in 0..prim_count {
             let node = &mut nodes[begin + i];
             node.bounds = self.aabbs[prim_indices[i] as usize].with_offset(0.0001);
-            node.count = 1;
-            node.left_first = i as i32;
+            node.set_count(Some(1));
+            node.set_left_first(Some(i as u32));
         }
 
         let (aux_slice0, aux_slice1) = unsafe {

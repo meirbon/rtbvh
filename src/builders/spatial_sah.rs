@@ -14,7 +14,7 @@ use std::{
 
 #[derive(Debug, Copy, Clone)]
 struct SpatialBin {
-    pub aabb: Aabb,
+    pub aabb: Aabb<i32>,
     pub accumulated_aabb: Aabb,
     pub entry: usize,
     pub exit: usize,
@@ -25,8 +25,8 @@ struct ObjectSplit {
     pub cost: f32,
     pub index: usize,
     pub axis: usize,
-    pub left_box: Aabb,
-    pub right_box: Aabb,
+    pub left_box: Aabb<i32>,
+    pub right_box: Aabb<i32>,
 }
 
 impl Default for ObjectSplit {
@@ -60,7 +60,7 @@ impl Default for SpatialSplit {
 
 #[derive(Debug, Copy, Clone)]
 struct SpatialReference {
-    aabb: Aabb,
+    aabb: Aabb<i32>,
     center: Vec3,
     prim_id: u32,
 }
@@ -80,7 +80,7 @@ pub trait SpatialTriangle {
     fn vertex1(&self) -> [f32; 3];
     fn vertex2(&self) -> [f32; 3];
 
-    fn split(&self, axis: usize, position: f32) -> (Aabb, Aabb) {
+    fn split(&self, axis: usize, position: f32) -> (Aabb<i32>, Aabb<i32>) {
         let p = [
             Vec3A::from(self.vertex0()),
             Vec3A::from(self.vertex1()),
@@ -164,7 +164,7 @@ impl WorkItem {
     }
 }
 
-struct SpatialSahBuildTask<'a, T: Primitive + SpatialTriangle> {
+struct SpatialSahBuildTask<'a, T: Primitive<i32> + SpatialTriangle> {
     builder: &'a SpatialSahBuilder<'a, T>,
     allocator: AtomicNodeStack<'a>,
     references: [UnsafeSliceWrapper<'a, SpatialReference>; 3],
@@ -175,7 +175,9 @@ struct SpatialSahBuildTask<'a, T: Primitive + SpatialTriangle> {
     spatial_threshold: f32,
 }
 
-impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
+impl<'a, T: Primitive<i32> + SpatialTriangle>
+    SpatialSahBuildTask<'a, T>
+{
     #[allow(clippy::clippy::too_many_arguments)]
     pub(crate) fn new(
         builder: &'a SpatialSahBuilder<'a, T>,
@@ -261,8 +263,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         let new_nodes = self.allocator.allocate().unwrap();
 
         let parent = self.allocator.get_mut(self.work_item.node).unwrap();
-        parent.left_first = new_nodes.left as i32;
-        parent.count = -1;
+        parent.set_left_first(Some(new_nodes.left as u32));
+        parent.set_count(None);
         parent.bounds.offset_by(0.0001);
 
         new_nodes.left_node.bounds = left_box;
@@ -594,7 +596,9 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
     }
 }
 
-impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
+impl<'a, T: Primitive<i32> + SpatialTriangle> Task
+    for SpatialSahBuildTask<'a, T>
+{
     fn run(mut self) -> Option<(Self, Self)> {
         let node = self.allocator.get_mut(self.work_item.node).unwrap();
         let spatial_threshold = self.spatial_threshold;
@@ -610,8 +614,8 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
                 prim_indices.set(first_prim + i, references[0][begin + i].prim_id);
             }
 
-            node.left_first = first_prim as i32;
-            node.count = prim_count as i32;
+            node.set_left_first(Some(first_prim as u32));
+            node.set_count(Some(prim_count as u32));
         };
 
         if self.work_size() <= 1 || self.depth() >= self.builder.max_depth {
@@ -712,8 +716,8 @@ impl<'a, T: Primitive + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
     }
 }
 
-pub struct SpatialSahBuilder<'a, T: Primitive + SpatialTriangle> {
-    aabbs: &'a [Aabb],
+pub struct SpatialSahBuilder<'a, T: Primitive<i32> + SpatialTriangle> {
+    aabbs: &'a [Aabb<i32>],
     primitives: &'a [T],
 
     binning_pass_count: usize,
@@ -726,8 +730,10 @@ pub struct SpatialSahBuilder<'a, T: Primitive + SpatialTriangle> {
     split_factor: f32,
 }
 
-impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb], primitives: &'a [T]) -> Self {
+impl<'a, T: Primitive<i32> + SpatialTriangle>
+    SpatialSahBuilder<'a, T>
+{
+    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
         debug_assert_eq!(aabbs.len(), primitives.len());
 
         Self {
@@ -786,7 +792,9 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a, T> {
+impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm
+    for SpatialSahBuilder<'a, T>
+{
     fn build(self) -> Bvh {
         let prim_count = self.aabbs.len();
         let max_reference_count = prim_count + (prim_count as f32 * self.split_factor) as usize;

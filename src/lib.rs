@@ -116,12 +116,12 @@ mod tests {
         vertex2: Vec4,
     }
 
-    impl Primitive for Triangle {
+    impl Primitive<i32> for Triangle {
         fn center(&self) -> [f32; 3] {
             ((self.vertex0.xyz() + self.vertex1.xyz() + self.vertex2.xyz()) * (1.0 / 3.0)).into()
         }
 
-        fn aabb(&self) -> Aabb {
+        fn aabb(&self) -> Aabb<i32> {
             let mut aabb = Aabb::empty();
             aabb.grow(self.vertex0.xyz());
             aabb.grow(self.vertex1.xyz());
@@ -144,7 +144,7 @@ mod tests {
         }
     }
 
-    pub(crate) fn load_teapot() -> (Vec<Aabb>, Vec<Triangle>) {
+    pub(crate) fn load_teapot() -> (Vec<Aabb<i32>>, Vec<Triangle>) {
         use std::path::PathBuf;
         let loader = l3d::LoadInstance::new().with_default();
         let result = loader.load(LoadOptions {

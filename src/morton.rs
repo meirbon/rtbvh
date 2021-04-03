@@ -60,9 +60,9 @@ impl MortonEncoder {
         Self::morton_encode(x, y, z)
     }
 
-    pub fn get_sorted_indices<T: Primitive>(
+    pub fn get_sorted_indices<E: Debug + Copy + Send + Sync, T: Primitive<E>>(
         &self,
-        aabbs: &[Aabb],
+        aabbs: &[Aabb<E>],
         primitives: &[T],
     ) -> (Vec<u32>, Vec<u32>) {
         debug_assert_eq!(aabbs.len(), primitives.len());

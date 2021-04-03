@@ -8,9 +8,9 @@ use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-pub trait Primitive: Debug + Copy + Send + Sync {
+pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Copy + Send + Sync {
     fn center(&self) -> [f32; 3];
-    fn aabb(&self) -> Aabb;
+    fn aabb(&self) -> Aabb<AabbType>;
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -21,12 +21,12 @@ pub enum BuildType {
     Spatial,
 }
 
-pub struct Builder<'a, T: Primitive> {
-    pub aabbs: &'a [Aabb],
+pub struct Builder<'a, T: Primitive<i32>> {
+    pub aabbs: &'a [Aabb<i32>],
     pub primitives: &'a [T],
 }
 
-impl<'a, T: Primitive> Builder<'a, T> {
+impl<'a, T: Primitive<i32>> Builder<'a, T> {
     pub fn construct_spatial_sah(self) -> Bvh
     where
         T: SpatialTriangle,
@@ -229,7 +229,7 @@ impl Bvh {
     fn traverse_check(&self, cur_node: &BvhNode, checks: &mut [u8]) {
         if let Some(left_first) = cur_node.get_left_first() {
             if cur_node.is_leaf() {
-                for i in 0..cur_node.count {
+                for i in 0..cur_node.get_count_unchecked() {
                     let prim_id = self.prim_indices[(left_first as i32 + i) as usize] as usize;
                     debug_assert!(
                         prim_id < checks.len(),
@@ -320,8 +320,8 @@ impl Mbvh {
         if nodes.len() <= 4 {
             for (i, node) in nodes.iter().enumerate() {
                 m_nodes[0].set_bounds_bb(i, &node.bounds);
-                m_nodes[0].children[i] = node.left_first;
-                m_nodes[0].counts[i] = node.count;
+                m_nodes[0].children[i] = node.get_left_first_unchecked();
+                m_nodes[0].counts[i] = node.get_count_unchecked();
             }
 
             return Mbvh {
@@ -348,8 +348,8 @@ impl Mbvh {
         if bvh.nodes.len() <= 4 {
             for (i, node) in bvh.nodes.iter().enumerate() {
                 m_nodes[0].set_bounds_bb(i, &node.bounds);
-                m_nodes[0].children[i] = node.left_first;
-                m_nodes[0].counts[i] = node.count;
+                m_nodes[0].children[i] = node.get_left_first_unchecked();
+                m_nodes[0].counts[i] = node.get_count_unchecked();
             }
 
             return Mbvh {
@@ -510,13 +510,13 @@ impl From<Bvh> for Mbvh {
     }
 }
 
-impl Bounds for Bvh {
+impl Bounds<i32> for Bvh {
     fn bounds(&self) -> Aabb {
         self.nodes[0].bounds
     }
 }
 
-impl Bounds for Mbvh {
+impl Bounds<i32> for Mbvh {
     fn bounds(&self) -> Aabb {
         self.nodes[0].bounds
     }

@@ -120,14 +120,18 @@ impl From<BvhType> for rtbvh::builders::BvhType {
 #[repr(C)]
 pub struct RTAabb {
     pub min: [f32; 3],
+    pub count: i32,
     pub max: [f32; 3],
+    pub left_first: i32,
 }
 
 impl From<Aabb> for RTAabb {
     fn from(bb: Aabb) -> RTAabb {
         RTAabb {
             min: bb.min,
+            count: bb.extra1,
             max: bb.max,
+            left_first: bb.extra2,
         }
     }
 }
@@ -136,7 +140,9 @@ impl From<RTAabb> for Aabb {
     fn from(bb: RTAabb) -> Self {
         Self {
             min: bb.min,
+            extra1: bb.count,
             max: bb.max,
+            extra2: bb.left_first,
         }
     }
 }
@@ -145,16 +151,12 @@ impl From<RTAabb> for Aabb {
 #[repr(C)]
 pub struct RTBvhNode {
     pub aabb: RTAabb,
-    pub left_first: i32,
-    pub count: i32,
 }
 
 impl From<RTBvhNode> for BvhNode {
     fn from(n: RTBvhNode) -> Self {
         BvhNode {
             bounds: n.aabb.into(),
-            left_first: n.left_first,
-            count: n.count,
         }
     }
 }
@@ -163,8 +165,6 @@ impl From<BvhNode> for RTBvhNode {
     fn from(node: BvhNode) -> RTBvhNode {
         RTBvhNode {
             aabb: node.bounds.into(),
-            left_first: node.left_first,
-            count: node.count,
         }
     }
 }

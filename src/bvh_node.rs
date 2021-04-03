@@ -7,17 +7,13 @@ use crate::{Aabb, RayPacket4};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct BvhNode {
-    pub bounds: Aabb,
-    pub left_first: i32,
-    pub count: i32,
+    pub bounds: Aabb<i32>,
 }
 
 impl Default for BvhNode {
     fn default() -> Self {
         Self {
             bounds: Aabb::default(),
-            left_first: 0,
-            count: 0,
         }
     }
 }
@@ -54,8 +50,8 @@ impl BvhNode {
     pub fn new() -> BvhNode {
         BvhNode {
             bounds: Aabb::new(),
-            left_first: -1,
-            count: -1,
+            // left_first: -1,
+            // count: -1,
         }
     }
 
@@ -85,9 +81,23 @@ impl BvhNode {
     }
 
     #[inline(always)]
+    pub fn set_left_first(&mut self, left_first: Option<u32>) {
+        self.bounds.extra2 = match left_first {
+            Some(l) => l as i32,
+            None => -1,
+        }
+    }
+
+    #[inline(always)]
+    pub fn with_left_first(mut self, left_first: Option<u32>) -> Self {
+        self.set_left_first(left_first);
+        self
+    }
+
+    #[inline(always)]
     pub fn get_left_first(&self) -> Option<u32> {
-        if self.left_first >= 0 {
-            Some(self.left_first as u32)
+        if self.bounds.extra2 >= 0 {
+            Some(self.bounds.extra2 as u32)
         } else {
             None
         }
@@ -95,13 +105,27 @@ impl BvhNode {
 
     #[inline(always)]
     pub fn get_left_first_unchecked(&self) -> i32 {
-        self.left_first
+        self.bounds.extra2
+    }
+
+    #[inline(always)]
+    pub fn set_count(&mut self, count: Option<u32>) {
+        self.bounds.extra1 = match count {
+            Some(c) => c as i32,
+            None => -1,
+        };
+    }
+
+    #[inline(always)]
+    pub fn with_count(mut self, count: Option<u32>) -> Self {
+        self.set_count(count);
+        self
     }
 
     #[inline(always)]
     pub fn get_count(&self) -> Option<u32> {
-        if self.count >= 0 {
-            Some(self.count as u32)
+        if self.bounds.extra1 >= 0 {
+            Some(self.bounds.extra1 as u32)
         } else {
             None
         }
@@ -109,22 +133,22 @@ impl BvhNode {
 
     #[inline(always)]
     pub fn get_count_unchecked(&self) -> i32 {
-        self.count
+        self.bounds.extra1
     }
 
     #[inline(always)]
     pub fn has_children(&self) -> bool {
-        self.count < 0 && self.left_first >= 0
+        self.bounds.extra1 < 0 && self.bounds.extra2 >= 0
     }
 
     #[inline(always)]
     pub fn is_leaf(&self) -> bool {
-        self.count >= 0
+        self.bounds.extra1 >= 0
     }
 
     #[inline(always)]
     pub fn is_valid(&self) -> bool {
-        self.left_first >= 0
+        self.bounds.extra2 >= 0
     }
 
     pub fn depth_test<I>(
@@ -166,10 +190,10 @@ impl BvhNode {
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
             stack_ptr -= 1;
 
-            if node.count > -1 {
+            if node.bounds.extra1 > -1 {
                 // Leaf node
-                for i in 0..node.count {
-                    let prim_id = prim_indices[(node.left_first + i) as usize];
+                for i in 0..node.bounds.extra1 {
+                    let prim_id = prim_indices[(node.bounds.extra2 + i) as usize];
                     if let Some((new_t, d)) = depth_test(prim_id as usize, t_min, t) {
                         t = new_t;
                         depth += d as i32;
@@ -228,8 +252,8 @@ impl BvhNode {
 
             if node.is_leaf() {
                 // Leaf node
-                for i in 0..node.count {
-                    let prim_id = prim_indices[(node.left_first + i) as usize];
+                for i in 0..node.bounds.extra1 {
+                    let prim_id = prim_indices[(node.bounds.extra2 + i) as usize];
                     if let Some((new_t, new_hit)) = intersection_test(prim_id as usize, t_min, t) {
                         t = new_t;
                         hit_record = Some(new_hit);
@@ -284,10 +308,10 @@ impl BvhNode {
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
             stack_ptr -= 1;
 
-            if node.count > -1 {
+            if node.bounds.extra1 > -1 {
                 // Leaf node
-                for i in 0..node.count {
-                    let prim_id = prim_indices[(node.left_first + i) as usize];
+                for i in 0..node.bounds.extra1 {
+                    let prim_id = prim_indices[(node.bounds.extra2 + i) as usize];
                     if let Some(new_t) = intersection_test(prim_id as usize, t_min, t) {
                         t = new_t;
                     }
@@ -344,10 +368,10 @@ impl BvhNode {
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
             stack_ptr -= 1;
 
-            if node.count > -1 {
+            if node.bounds.extra1 > -1 {
                 // Leaf node
-                for i in 0..node.count {
-                    let prim_id = prim_indices[(node.left_first + i) as usize];
+                for i in 0..node.bounds.extra1 {
+                    let prim_id = prim_indices[(node.bounds.extra2 + i) as usize];
                     if intersection_test(prim_id as usize, t_min, t_max) {
                         return true;
                     }
@@ -466,15 +490,15 @@ impl BvhNode {
             let node = &tree[hit_stack[stack_ptr as usize] as usize];
             stack_ptr -= 1;
 
-            if node.count > -1 {
+            if node.bounds.extra1 > -1 {
                 // Leaf node
-                for i in 0..node.count {
-                    let prim_id = prim_indices[(node.left_first + i) as usize] as usize;
+                for i in 0..node.bounds.extra1 {
+                    let prim_id = prim_indices[(node.bounds.extra2 + i) as usize] as usize;
                     intersection_test(prim_id, packet);
                 }
             } else if let Some(left_first) = node.get_left_first() {
-                let hit_left = tree[left_first as usize]
-                    .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
+                let hit_left =
+                    tree[left_first as usize].intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
                 let hit_right = tree[(left_first + 1) as usize]
                     .intersect4(packet, inv_dir_x, inv_dir_y, inv_dir_z);
 
