@@ -154,8 +154,29 @@ mod tests {
 
         let mesh = match result {
             LoadResult::Mesh(m) => m,
-            LoadResult::Scene(_) => panic!(),
-            LoadResult::None(e) => panic!("{}", e),
+            _ => {
+                let vertices: [Vec4; 4] = [
+                    Vec4::new(-1.0, -1.0, 0.0, 1.0),
+                    Vec4::new(1.0, -1.0, 0.0, 1.0),
+                    Vec4::new(1.0, 1.0, 0.0, 1.0),
+                    Vec4::new(-1.0, 1.0, 0.0, 1.0),
+                ];
+
+                let primitives: Vec<Triangle> = vec![
+                    Triangle {
+                        vertex0: vertices[0],
+                        vertex1: vertices[1],
+                        vertex2: vertices[2],
+                    },
+                    Triangle {
+                        vertex0: vertices[0],
+                        vertex1: vertices[2],
+                        vertex2: vertices[3],
+                    },
+                ];
+                let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
+                return (aabbs, primitives);
+            }
         };
 
         let primitives = mesh
