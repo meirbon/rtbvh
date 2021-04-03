@@ -26,12 +26,6 @@ jobs:
       - name: Run tests FFI
         working-directory: ./rtbvh_ffi
         run: cargo test --verbose
-      - uses: actions/upload-artifact@v2
-        with:
-          name: rtbvh-ffi headers
-          path: |
-            ./rtbvh_ffi/target/rtbvh.h
-            ./rtbvh_ffi/target/rtbvh.hpp
 
   build-ffi-windows:
     runs-on: windows-latest
@@ -42,9 +36,11 @@ jobs:
         with:
           name: rtbvh-ffi-windows-library
           path: |
+            ./rtbvh_ffi/target/rtbvh.h
+            ./rtbvh_ffi/target/rtbvh.hpp
             ./rtbvh_ffi/target/release/rtbvh_rs.lib
-            ./rtbvh_ffi/target/release/rtbvh_rsdll.lib
-            ./rtbvh_ffi/target/release/rtbvh_rsdll.dll
+            ./rtbvh_ffi/target/release/rtbvh_rs.dll
+            ./rtbvh_ffi/target/release/rtbvh_rs.dll.lib
 
   build-ffi-ubuntu:
     runs-on: ubuntu-latest
@@ -55,6 +51,8 @@ jobs:
         with:
           name: rtbvh-ffi-linux-ubuntu-library
           path: |
+            ./rtbvh_ffi/target/rtbvh.h
+            ./rtbvh_ffi/target/rtbvh.hpp
             ./rtbvh_ffi/target/release/librtbvh_rs.a
             ./rtbvh_ffi/target/release/librtbvh_rs.so
 
@@ -67,5 +65,7 @@ jobs:
         with:
           name: rtbvh-ffi-macos-library
           path: |
+            ./rtbvh_ffi/target/rtbvh.h
+            ./rtbvh_ffi/target/rtbvh.hpp
             ./rtbvh_ffi/target/release/librtbvh_rs.a
             ./rtbvh_ffi/target/release/librtbvh_rs.dylib
