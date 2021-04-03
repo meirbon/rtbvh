@@ -226,6 +226,23 @@ impl Primitive for RTTriangleWrapper {
             [x, y, z]
         }
     }
+
+    fn aabb(&self) -> AABB {
+        let mut aabb = AABB::empty();
+        unsafe {
+            let ptr0 = self
+                .vertices
+                .add((self.vertex0_offset * self.vertex_stride / 4) as usize);
+            let ptr1 = ptr0.add((self.vertex_stride / 4) as usize);
+            let ptr2 = ptr0.add((self.vertex_stride / 4) as usize * 2);
+
+            aabb.grow([*ptr0, *ptr0.add(1), *ptr0.add(2)]);
+            aabb.grow([*ptr1, *ptr1.add(1), *ptr1.add(2)]);
+            aabb.grow([*ptr2, *ptr2.add(1), *ptr2.add(2)]);
+        }
+
+        aabb
+    }
 }
 
 unsafe impl Send for RTTriangleWrapper {}
@@ -312,9 +329,16 @@ pub extern "C" fn create_spatial_bvh(
 struct Vector3 {
     data: [f32; 3],
 }
+
 impl Primitive for Vector3 {
     fn center(&self) -> [f32; 3] {
         self.data
+    }
+
+    fn aabb(&self) -> AABB {
+        let mut aabb = AABB::empty();
+        aabb.grow(self.data);
+        aabb
     }
 }
 
@@ -325,6 +349,12 @@ struct Vector4 {
 impl Primitive for Vector4 {
     fn center(&self) -> [f32; 3] {
         [self.data[0], self.data[1], self.data[2]]
+    }
+
+    fn aabb(&self) -> AABB {
+        let mut aabb = AABB::empty();
+        aabb.grow([self.data[0], self.data[1], self.data[2]]);
+        aabb
     }
 }
 
