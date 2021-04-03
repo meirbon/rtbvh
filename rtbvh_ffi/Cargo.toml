@@ -8,7 +8,7 @@ build = "build.rs"
 [lib]
 name = "rtbvh_rs"
 path = "src/lib.rs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 rtbvh = { path = "../" }

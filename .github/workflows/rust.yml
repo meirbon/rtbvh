@@ -41,7 +41,10 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-windows-library
-          path: ./rtbvh_ffi/target/release/rtbvh_rs.dll
+          path: |
+            ./rtbvh_ffi/target/release/rtbvh_rs.lib
+            ./rtbvh_ffi/target/release/rtbvh_rsdll.lib
+            ./rtbvh_ffi/target/release/rtbvh_rsdll.dll
 
   build-ffi-ubuntu:
     runs-on: ubuntu-latest
@@ -51,7 +54,9 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-linux-ubuntu-library
-          path: ./rtbvh_ffi/target/release/librtbvh_rs.so
+          path: |
+            ./rtbvh_ffi/target/release/librtbvh_rs.a
+            ./rtbvh_ffi/target/release/librtbvh_rs.so
 
   build-ffi-macos:
     runs-on: macos-latest
@@ -61,4 +66,6 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: rtbvh-ffi-macos-library
-          path: ./rtbvh_ffi/target/release/librtbvh_rs.dylib
+          path: |
+            ./rtbvh_ffi/target/release/librtbvh_rs.a
+            ./rtbvh_ffi/target/release/librtbvh_rs.dylib
