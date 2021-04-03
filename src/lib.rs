@@ -145,9 +145,11 @@ mod tests {
     }
 
     pub(crate) fn load_teapot() -> (Vec<Aabb>, Vec<Triangle>) {
+        use std::path::PathBuf;
+        let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let loader = l3d::LoadInstance::new().with_default();
         let result = loader.load(LoadOptions {
-            path: std::path::PathBuf::from("objects/teapot.obj"),
+            path: dir.join("objects").join("teapot.obj"),
             ..Default::default()
         });
 
