@@ -184,11 +184,18 @@ fn main() {
         .collect::<Vec<Triangle>>();
     let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
 
+    let timer = Timer::default();
     let bvh = Builder {
         aabbs: aabbs.as_slice(),
         primitives: primitives.as_slice(),
     }
     .construct_spatial_sah();
+
+    println!(
+        "Bvh construction with spatial_sah type of {} primitives took {} ms",
+        primitives.len(),
+        timer.elapsed_in_millis()
+    );
 
     // Put ray in middle of teapot
     let origin = Vec3::new(0.0, 1.5, 0.0);
