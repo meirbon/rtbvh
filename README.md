@@ -13,10 +13,10 @@ This library emits a C/C++ library which is used in my [hobby renderer](https://
 ## Performance
 In a scene with a teapot of ~6300 triangles, my MacBook Pro with an 8-core i9 9980HK achieves the following performance:
 ```
-Single-threaded rays: 1.000.000 rays in 245.95 ms, 4.065867 million rays per second
-16 threads rays: 1.000.000 rays in 29.846 ms, 33.505325 million rays per second
-Single-threaded packets: 1.000.000 rays in 111.995 ms, 8.928969 million rays per second
-16 threads packets: 1.000.000 rays in 10.669 ms, 93.7295 million rays per second
+Single-threaded rays: 1.000.000 rays in 192.859 ms, 5.1851354 million rays per second
+16 threads rays: 1.000.000 rays in 22.546 ms, 44.353767 million rays per second
+Single-threaded packets: 1.000.000 rays in 42.497 ms, 23.531073 million rays per second
+16 threads packets: 1.000.000 rays in 4.992 ms, 200.32051 million rays per second
 ```
 
 ## Usage
