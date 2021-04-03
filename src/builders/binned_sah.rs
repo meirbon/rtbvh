@@ -129,7 +129,9 @@ impl<'a, T: Primitive> BinnedSahBuildTask<'a, T> {
 
 impl<'a, T: Primitive> Task for BinnedSahBuildTask<'a, T> {
     fn run(mut self) -> Option<(Self, Self)> {
+        self.node.bounds.offset_by(0.0001);
         let make_leaf = |node: &mut BvhNode, begin: usize, end: usize| {
+            node.bounds.offset_by(0.0001);
             node.left_first = begin as i32;
             node.count = (end - begin) as i32;
         };
@@ -371,14 +373,53 @@ impl<'a, T: Primitive> BuildAlgorithm for BinnedSahBuilder<'a, T> {
         #[cfg(not(feature = "wasm_support"))]
         task_spawner.run(root_task);
 
-        let mut bvh = Bvh {
+        Bvh {
             nodes,
             prim_indices,
             build_type: BuildType::BinnedSAH,
-        };
+        }
+    }
+}
 
-        bvh.refit(self.aabbs);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spatial_sah::SpatialTriangle;
+    use crate::Bounds;
 
-        bvh
+    #[test]
+    fn test_binned_sah_build() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = BinnedSahBuilder::new(aabbs.as_slice(), primitives.as_slice());
+        let bvh = builder.build();
+
+        let bounds = bvh.bounds();
+        assert!(bounds.is_valid());
+        assert!(bvh.validate(primitives.len()));
+
+        for (i, t) in primitives.iter().enumerate() {
+            assert!(
+                bounds.contains(t.vertex0()),
+                "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex0())
+            );
+            assert!(
+                bounds.contains(t.vertex1()),
+                "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex1())
+            );
+            assert!(
+                bounds.contains(t.vertex2()),
+                "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex2())
+            );
+        }
     }
 }

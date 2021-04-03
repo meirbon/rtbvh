@@ -99,6 +99,9 @@ impl Bvh {
                     // Right node
                     aabb.grow_bb(&self.nodes[(left_first + 1) as usize].bounds);
                 }
+
+                // Offset by a small epsilon to make sure the bounds encapsulate all of the geometry
+                aabb.offset_by(0.0001);
             }
 
             // Overwrite AABB
@@ -248,15 +251,18 @@ impl Bvh {
 
     /// Validates the current bvh for correctness in terms of primitive ids and
     /// tree structure
-    pub fn validate(&self, prim_count: usize) {
+    pub fn validate(&self, prim_count: usize) -> bool {
         let mut found_indices = vec![0_u8; prim_count];
         self.traverse_check(&self.nodes[0], found_indices.as_mut());
 
+        let mut valid = true;
         for (i, index) in found_indices.iter().copied().enumerate() {
             if index == 0 {
                 eprintln!("prim ({}) not referenced", i);
+                valid = false;
             }
         }
+        valid
     }
 
     pub fn into_raw_indices(self) -> Vec<u32> {

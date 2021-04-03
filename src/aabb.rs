@@ -29,12 +29,7 @@ impl Display for Aabb {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let min = Vec3A::from(self.min);
         let max = Vec3A::from(self.max);
-
-        write!(
-            f,
-            "(min: ({}, {}, {}), max: ({}, {}, {}))",
-            min.x, min.y, min.z, max.x, max.y, max.z,
-        )
+        write!(f, "(min: {}, max: {}", min, max)
     }
 }
 
@@ -64,8 +59,17 @@ impl Aabb {
         }
     }
 
+    pub fn is_valid(&self) -> bool {
+        Vec3A::from(self.min).cmple(self.max.into()).all()
+    }
+
     #[inline]
-    pub fn intersect<T: Into<[f32; 3]>>(&self, origin: T, dir_inverse: T, t: f32) -> Option<(f32, f32)> {
+    pub fn intersect<T: Into<[f32; 3]>>(
+        &self,
+        origin: T,
+        dir_inverse: T,
+        t: f32,
+    ) -> Option<(f32, f32)> {
         let origin = Vec3A::from(origin.into());
         let dir_inverse = Vec3A::from(dir_inverse.into());
         let (min, max) = self.points::<Vec3A>();
@@ -177,6 +181,19 @@ impl Aabb {
 
         self.min = min.into();
         self.max = max.into();
+    }
+
+    #[inline]
+    pub fn with_offset(mut self, delta: f32) -> Self {
+        let delta = Vec3A::splat(delta);
+        let (min, max) = self.points::<Vec3A>();
+
+        let min = min - delta;
+        let max = max + delta;
+
+        self.min = min.into();
+        self.max = max.into();
+        self
     }
 
     #[inline]

@@ -282,7 +282,7 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
 
         for i in 0..prim_count {
             let node = &mut nodes[begin + i];
-            node.bounds = self.aabbs[prim_indices[i] as usize];
+            node.bounds = self.aabbs[prim_indices[i] as usize].with_offset(0.0001);
             node.count = 1;
             node.left_first = i as i32;
         }
@@ -318,6 +318,50 @@ impl<'a, T: Primitive> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T>
             nodes,
             prim_indices,
             build_type: BuildType::LocallyOrderedClustered,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spatial_sah::SpatialTriangle;
+    use crate::Bounds;
+    use glam::*;
+
+    #[test]
+    fn test_locb_build() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = LocallyOrderedClusteringBuilder::new(aabbs.as_slice(), primitives.as_slice());
+        let bvh = builder.build();
+
+        let bounds = bvh.bounds();
+        assert!(bounds.is_valid());
+        assert!(bvh.validate(primitives.len()));
+
+        for (i, t) in primitives.iter().enumerate() {
+            assert!(
+                bounds.contains(t.vertex0()),
+                "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex0())
+            );
+            assert!(
+                bounds.contains(t.vertex1()),
+                "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex1())
+            );
+            assert!(
+                bounds.contains(t.vertex2()),
+                "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex2())
+            );
         }
     }
 }

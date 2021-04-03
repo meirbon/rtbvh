@@ -3,7 +3,7 @@ use crate::{
     Primitive,
 };
 use crate::{utils::*, BuildType};
-use crate::{Aabb, BvhNode, Bvh};
+use crate::{Aabb, Bvh, BvhNode};
 use glam::*;
 use rayon::prelude::*;
 use std::{
@@ -254,8 +254,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         &mut self,
         right_begin: usize,
         right_end: usize,
-        left_box: &Aabb,
-        right_box: &Aabb,
+        left_box: Aabb,
+        right_box: Aabb,
         is_sorted: bool,
     ) -> (WorkItem, WorkItem) {
         let new_nodes = self.allocator.allocate().unwrap();
@@ -263,9 +263,10 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         let parent = self.allocator.get_mut(self.work_item.node).unwrap();
         parent.left_first = new_nodes.left as i32;
         parent.count = -1;
+        parent.bounds.offset_by(0.0001);
 
-        new_nodes.left_node.bounds = *left_box;
-        new_nodes.right_node.bounds = *right_box;
+        new_nodes.left_node.bounds = left_box;
+        new_nodes.right_node.bounds = right_box;
 
         // Allocate split space for the two children based on their SAH cost
         // This assumes that reference ranges look like this:
@@ -364,8 +365,8 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         self.allocate_children(
             split.index,
             self.work_item.end,
-            &split.left_box,
-            &split.right_box,
+            split.left_box,
+            split.right_box,
             true,
         )
     }
@@ -589,7 +590,7 @@ impl<'a, T: Primitive + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         debug_assert_eq!(left_end, right_begin);
         debug_assert!(right_end <= self.work_item.split_end);
 
-        self.allocate_children(right_begin, right_end, &left_box, &right_box, false)
+        self.allocate_children(right_begin, right_end, left_box, right_box, false)
     }
 }
 
@@ -880,14 +881,52 @@ impl<'a, T: Primitive + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a
         nodes.resize(node_count.load(SeqCst), BvhNode::new());
 
         // Compose bvh
-        let mut bvh = Bvh {
+        Bvh {
             nodes,
             prim_indices,
             build_type: BuildType::Spatial,
-        };
+        }
+    }
+}
 
-        // Compose AABBs for nodes
-        bvh.refit(self.aabbs);
-        bvh
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Bounds;
+
+    #[test]
+    fn test_spatial_sah_build() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = SpatialSahBuilder::new(aabbs.as_slice(), primitives.as_slice());
+        let bvh = builder.build();
+
+        let bounds = bvh.bounds();
+        assert!(bounds.is_valid());
+        assert!(bvh.validate(primitives.len()));
+
+        for (i, t) in primitives.iter().enumerate() {
+            assert!(
+                bounds.contains(t.vertex0()),
+                "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex0())
+            );
+            assert!(
+                bounds.contains(t.vertex1()),
+                "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex1())
+            );
+            assert!(
+                bounds.contains(t.vertex2()),
+                "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
+                i,
+                bounds,
+                Vec3::from(t.vertex2())
+            );
+        }
     }
 }
