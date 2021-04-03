@@ -355,7 +355,7 @@ impl Aabb {
         for bb in aabbs {
             aabb.grow_bb(bb);
         }
-        aabb
+        aabb.with_offset(0.0001)
     }
 }
 
