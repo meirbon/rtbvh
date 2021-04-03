@@ -26,3 +26,45 @@ jobs:
       - name: Run tests FFI
         working-directory: ./rtbvh_ffi
         run: cargo test --verbose
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rtbvh-ffi headers
+          path: |
+            ./rtbvh_ffi/target/rtbvh.h
+            ./rtbvh_ffi/target/rtbvh.hpp
+
+  build-ffi-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build FFI release
+        working-directory: ./rtbvh_ffi
+        run: cargo build --release --verbose
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rtbvh-ffi-windows-library
+          path: ./rtbvh_ffi/target/release/rtbvh_rs.dll
+
+  build-ffi-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build FFI release
+        working-directory: ./rtbvh_ffi
+        run: cargo build --release --verbose
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rtbvh-ffi-linux-ubuntu-library
+          path: ./rtbvh_ffi/target/release/rtbvh_rs.so
+
+  build-ffi-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build FFI release
+        working-directory: ./rtbvh_ffi
+        run: cargo build --release --verbose
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rtbvh-ffi-macos-library
+          path: ./rtbvh_ffi/target/release/rtbvh_rs.dylib
