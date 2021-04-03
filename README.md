@@ -1,4 +1,7 @@
-[![Build Status](https://travis-ci.org/MeirBon/rtbvh.svg?branch=master)](https://travis-ci.org/MeirBon/rtbvh)
+[![Build Status](https://github.com/MeirBon/rtbvh/actions/workflows/rust.yml/badge.svg)](https://github.com/MeirBon/rtbvh/actions/workflows/rust.yml)
+[![crates.io](https://img.shields.io/crates/v/rtbvh.svg)](https://crates.io/crates/rtbvh)
+
+https://github.com/MeirBon/rtbvh/actions/workflows/rust.yml/badge.svg
 
 # RTBVH
 A fast BVH library written in Rust. This library contains implementations of the following BVH building algorithms:
