@@ -8,9 +8,7 @@ use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>:
-    Debug + Copy + Send + Sync
-{
+pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Send + Sync {
     fn center(&self) -> Vec3;
 
     fn aabb(&self) -> Aabb<AabbType>;
