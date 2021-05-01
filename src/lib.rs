@@ -1,19 +1,21 @@
-pub mod aabb;
-pub mod builders;
-pub mod bvh;
-pub mod bvh_node;
-pub mod mbvh_node;
-pub mod morton;
-pub mod ray;
+mod aabb;
+mod builders;
+mod bvh;
+mod bvh_node;
+mod mbvh_node;
+mod morton;
+mod ray;
 mod utils;
+mod iter;
 
 pub use aabb::*;
 pub use builders::*;
-pub use bvh::*;
+pub use crate::bvh::*;
 pub use bvh_node::*;
 pub use mbvh_node::*;
 pub use morton::*;
 pub use ray::*;
+pub use iter::*;
 
 #[cfg(test)]
 mod tests {
@@ -44,6 +46,7 @@ mod tests {
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),
+            primitives_per_leaf: 1,
         };
         builder.construct_binned_sah();
     }
@@ -73,6 +76,7 @@ mod tests {
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),
+            primitives_per_leaf: 1,
         };
         builder.construct_locally_ordered_clustered();
     }
@@ -102,6 +106,7 @@ mod tests {
         let builder = Builder {
             aabbs: aabbs.as_slice(),
             primitives: primitives.as_slice(),
+            primitives_per_leaf: 1,
         };
         builder.construct_spatial_sah();
     }
@@ -117,8 +122,8 @@ mod tests {
     }
 
     impl Primitive<i32> for Triangle {
-        fn center(&self) -> [f32; 3] {
-            ((self.vertex0.xyz() + self.vertex1.xyz() + self.vertex2.xyz()) * (1.0 / 3.0)).into()
+        fn center(&self) -> Vec3 {
+            (self.vertex0.xyz() + self.vertex1.xyz() + self.vertex2.xyz()) * (1.0 / 3.0)
         }
 
         fn aabb(&self) -> Aabb<i32> {
@@ -131,16 +136,16 @@ mod tests {
     }
 
     impl SpatialTriangle for Triangle {
-        fn vertex0(&self) -> [f32; 3] {
-            self.vertex0.xyz().into()
+        fn vertex0(&self) -> Vec3 {
+            self.vertex0.xyz()
         }
 
-        fn vertex1(&self) -> [f32; 3] {
-            self.vertex1.xyz().into()
+        fn vertex1(&self) -> Vec3 {
+            self.vertex1.xyz()
         }
 
-        fn vertex2(&self) -> [f32; 3] {
-            self.vertex2.xyz().into()
+        fn vertex2(&self) -> Vec3 {
+            self.vertex2.xyz()
         }
     }
 

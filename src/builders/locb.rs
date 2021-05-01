@@ -2,7 +2,7 @@ use crate::morton::*;
 use crate::utils::{prefix_sum, UnsafeSliceWrapper};
 use crate::*;
 use builders::BuildAlgorithm;
-use glam::Vec3A;
+use glam::*;
 use rayon::prelude::*;
 
 pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive<i32>> {
@@ -43,7 +43,7 @@ impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
         (begin, end)
     }
 
-    #[allow(clippy::clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn cluster(
         &self,
         input: &[BvhNode],
@@ -269,7 +269,7 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm
 
         let mut nodes = vec![
             BvhNode {
-                bounds: (Vec3A::ZERO, Vec3A::ZERO).into(),
+                bounds: (Vec3::ZERO, Vec3::ZERO).into(),
             }
             .with_count(None)
             .with_left_first(Some(0));
@@ -329,7 +329,6 @@ mod tests {
     use super::*;
     use crate::spatial_sah::SpatialTriangle;
     use crate::Bounds;
-    use glam::*;
 
     #[test]
     fn test_locb_build() {

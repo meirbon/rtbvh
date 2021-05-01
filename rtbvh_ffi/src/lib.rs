@@ -1,9 +1,6 @@
 use glam::*;
 use lazy_static::lazy_static;
-use rtbvh::{
-    aabb::Aabb, builders::spatial_sah::SpatialTriangle, bvh_node::BvhNode, Builder, Bvh, Mbvh,
-    Primitive,
-};
+use rtbvh::{spatial_sah::SpatialTriangle, *};
 use std::sync::Mutex;
 
 lazy_static! {
@@ -107,11 +104,11 @@ pub enum BvhType {
     BinnedSAH = 1,
 }
 
-impl From<BvhType> for rtbvh::builders::BvhType {
+impl From<BvhType> for rtbvh::BvhType {
     fn from(this: BvhType) -> Self {
         match this {
-            BvhType::LocallyOrderedClustered => rtbvh::builders::BvhType::LocallyOrderedClustered,
-            BvhType::BinnedSAH => rtbvh::builders::BvhType::BinnedSAH,
+            BvhType::LocallyOrderedClustered => rtbvh::BvhType::LocallyOrderedClustered,
+            BvhType::BinnedSAH => rtbvh::BvhType::BinnedSAH,
         }
     }
 }
@@ -128,9 +125,9 @@ pub struct RTAabb {
 impl From<Aabb> for RTAabb {
     fn from(bb: Aabb) -> RTAabb {
         RTAabb {
-            min: bb.min,
+            min: bb.min.into(),
             count: bb.extra1,
-            max: bb.max,
+            max: bb.max.into(),
             left_first: bb.extra2,
         }
     }
@@ -139,9 +136,9 @@ impl From<Aabb> for RTAabb {
 impl From<RTAabb> for Aabb {
     fn from(bb: RTAabb) -> Self {
         Self {
-            min: bb.min,
+            min: bb.min.into(),
             extra1: bb.count,
-            max: bb.max,
+            max: bb.max.into(),
             extra2: bb.left_first,
         }
     }
@@ -217,7 +214,7 @@ struct RTTriangleWrapper {
 }
 
 impl Primitive for RTTriangleWrapper {
-    fn center(&self) -> [f32; 3] {
+    fn center(&self) -> Vec3 {
         unsafe {
             let ptr = self
                 .centers
@@ -225,7 +222,7 @@ impl Primitive for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            [x, y, z]
+            vec3(x, y, z)
         }
     }
 
@@ -238,9 +235,9 @@ impl Primitive for RTTriangleWrapper {
             let ptr1 = ptr0.add((self.vertex_stride / 4) as usize);
             let ptr2 = ptr0.add((self.vertex_stride / 4) as usize * 2);
 
-            aabb.grow([*ptr0, *ptr0.add(1), *ptr0.add(2)]);
-            aabb.grow([*ptr1, *ptr1.add(1), *ptr1.add(2)]);
-            aabb.grow([*ptr2, *ptr2.add(1), *ptr2.add(2)]);
+            aabb.grow(vec3(*ptr0, *ptr0.add(1), *ptr0.add(2)));
+            aabb.grow(vec3(*ptr1, *ptr1.add(1), *ptr1.add(2)));
+            aabb.grow(vec3(*ptr2, *ptr2.add(1), *ptr2.add(2)));
         }
 
         aabb
@@ -251,17 +248,17 @@ unsafe impl Send for RTTriangleWrapper {}
 unsafe impl Sync for RTTriangleWrapper {}
 
 impl SpatialTriangle for RTTriangleWrapper {
-    fn vertex0(&self) -> [f32; 3] {
+    fn vertex0(&self) -> Vec3 {
         unsafe {
             let ptr = self.vertices.add(self.vertex0_offset as usize);
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            [x, y, z]
+            vec3(x, y, z)
         }
     }
 
-    fn vertex1(&self) -> [f32; 3] {
+    fn vertex1(&self) -> Vec3 {
         unsafe {
             let ptr = self
                 .vertices
@@ -269,11 +266,11 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            [x, y, z]
+            vec3(x, y, z)
         }
     }
 
-    fn vertex2(&self) -> [f32; 3] {
+    fn vertex2(&self) -> Vec3 {
         unsafe {
             let ptr = self
                 .vertices
@@ -281,7 +278,7 @@ impl SpatialTriangle for RTTriangleWrapper {
             let x = *ptr.as_ref().unwrap();
             let y = *ptr.add(1).as_ref().unwrap();
             let z = *ptr.add(2).as_ref().unwrap();
-            [x, y, z]
+            vec3(x, y, z)
         }
     }
 }
@@ -295,6 +292,7 @@ pub extern "C" fn create_spatial_Bvh(
     vertices: *const f32,
     vertex_stride: usize,
     triangle_stride: usize,
+    prims_per_leaf: u32,
 ) -> RTBvh {
     assert_eq!(stride % 4, 0);
 
@@ -313,6 +311,7 @@ pub extern "C" fn create_spatial_Bvh(
     let builder = Builder {
         aabbs,
         primitives: primitives.as_slice(),
+        primitives_per_leaf: prims_per_leaf as usize,
     };
     let bvh = builder.construct_spatial_sah();
 
@@ -325,13 +324,13 @@ struct Vector3 {
 }
 
 impl Primitive for Vector3 {
-    fn center(&self) -> [f32; 3] {
-        self.data
+    fn center(&self) -> Vec3 {
+        Vec3::from(self.data)
     }
 
     fn aabb(&self) -> Aabb {
         let mut aabb = Aabb::empty();
-        aabb.grow(self.data);
+        aabb.grow(self.data.into());
         aabb
     }
 }
@@ -341,23 +340,24 @@ struct Vector4 {
     data: [f32; 4],
 }
 impl Primitive for Vector4 {
-    fn center(&self) -> [f32; 3] {
-        [self.data[0], self.data[1], self.data[2]]
+    fn center(&self) -> Vec3 {
+        vec3(self.data[0], self.data[1], self.data[2])
     }
 
     fn aabb(&self) -> Aabb {
         let mut aabb = Aabb::empty();
-        aabb.grow([self.data[0], self.data[1], self.data[2]]);
+        aabb.grow(vec3(self.data[0], self.data[1], self.data[2]));
         aabb
     }
 }
 
 #[no_mangle]
-pub extern "C" fn create_Bvh(
+pub extern "C" fn create_bvh(
     aabbs: *const RTAabb,
     prim_count: usize,
     centers: *const f32,
     center_stride: usize,
+    prims_per_leaf: usize,
     bvh_type: BvhType,
 ) -> RTBvh {
     assert_eq!(center_stride % 4, 0);
@@ -375,7 +375,11 @@ pub extern "C" fn create_Bvh(
         match center_stride {
             12 => {
                 let primitives = std::slice::from_raw_parts(centers as *const Vector3, prim_count);
-                let builder = rtbvh::bvh::Builder { aabbs, primitives };
+                let builder = rtbvh::Builder {
+                    aabbs,
+                    primitives,
+                    primitives_per_leaf: prims_per_leaf as usize,
+                };
                 match bvh_type {
                     BvhType::LocallyOrderedClustered => {
                         builder.construct_locally_ordered_clustered()
@@ -385,7 +389,11 @@ pub extern "C" fn create_Bvh(
             }
             16 => {
                 let primitives = std::slice::from_raw_parts(centers as *const Vector4, prim_count);
-                let builder = rtbvh::bvh::Builder { aabbs, primitives };
+                let builder = rtbvh::Builder {
+                    aabbs,
+                    primitives,
+                    primitives_per_leaf: prims_per_leaf as usize,
+                };
 
                 match bvh_type {
                     BvhType::LocallyOrderedClustered => {
@@ -427,14 +435,14 @@ pub extern "C" fn refit(aabbs: *const RTAabb, bvh: RTBvh) {
 }
 
 #[no_mangle]
-pub extern "C" fn free_Bvh(bvh: RTBvh) {
+pub extern "C" fn free_bvh(bvh: RTBvh) {
     if MANAGER.free(bvh.id).is_err() {
         eprintln!("Could not free bvh with id: {}", bvh.id);
     }
 }
 
 #[no_mangle]
-pub extern "C" fn free_Mbvh(bvh: RTMbvh) {
+pub extern "C" fn free_mbvh(bvh: RTMbvh) {
     if MANAGER.free_mbvh(bvh.id).is_err() {
         eprintln!("Could not free bvh with id: {}", bvh.id);
     }
@@ -443,7 +451,6 @@ pub extern "C" fn free_Mbvh(bvh: RTMbvh) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtbvh::*;
 
     #[test]
     fn same_size() {
@@ -460,37 +467,38 @@ mod tests {
 
     #[test]
     fn create_delete() {
-        let mut vertices: Vec<Vec3A> = Vec::with_capacity(81);
+        let mut vertices: Vec<Vec3> = Vec::with_capacity(81);
 
         // 27 Triangles
         for x in 0..=9 {
             for y in 0..=9 {
-                vertices.push(Vec3A::new(x as f32, y as f32, 0 as f32));
+                vertices.push(Vec3::new(x as f32, y as f32, 0 as f32));
             }
         }
 
         let aabbs: Vec<Aabb> = (0..27)
             .map(|i| {
-                let v0: Vec3A = vertices[i * 3];
-                let v1: Vec3A = vertices[i * 3 + 1];
-                let v2: Vec3A = vertices[i * 3 + 2];
+                let v0: Vec3 = vertices[i * 3];
+                let v1: Vec3 = vertices[i * 3 + 1];
+                let v2: Vec3 = vertices[i * 3 + 2];
                 aabb!(v0, v1, v2)
             })
             .collect();
 
-        let centers: Vec<Vec3A> = aabbs.iter().map(|bb| bb.center()).collect();
+        let centers: Vec<Vec3> = aabbs.iter().map(|bb| bb.center()).collect();
 
-        let bvh = create_Bvh(
+        let bvh = create_bvh(
             aabbs.as_ptr() as *const RTAabb,
             27,
             centers.as_ptr() as *const f32,
             16,
+            1,
             crate::BvhType::BinnedSAH,
         );
 
         let mbvh = create_mbvh(bvh);
 
-        free_Bvh(bvh);
-        free_Mbvh(mbvh);
+        free_bvh(bvh);
+        free_mbvh(mbvh);
     }
 }

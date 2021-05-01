@@ -116,7 +116,7 @@ impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
 impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
     #[inline]
     fn compute_bin_index(
-        center: [f32; 3],
+        center: Vec3,
         bin_count: usize,
         bin_offset: Vec3,
         center_to_bin: Vec3,
@@ -142,8 +142,8 @@ impl<'a, T: Primitive<i32>> Task for BinnedSahBuildTask<'a, T> {
         }
 
         let bin_count = self.builder.bin_count;
-        let center_to_bin = (Vec3::ONE / self.node.bounds.diagonal::<Vec3>()) * bin_count as f32;
-        let bin_offset: Vec3 = -Vec3::from(self.node.bounds.min) * center_to_bin;
+        let center_to_bin = (Vec3::ONE / self.node.bounds.diagonal()) * bin_count as f32;
+        let bin_offset: Vec3 = -self.node.bounds.min * center_to_bin;
 
         self.bins_per_axis.iter_mut().for_each(|bins| {
             bins.iter_mut().for_each(|b| {

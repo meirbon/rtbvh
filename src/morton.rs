@@ -35,7 +35,7 @@ impl MortonEncoder {
 
     pub fn new(aabb: &Aabb, grid_dim: usize) -> MortonEncoder {
         debug_assert!(grid_dim <= Self::MAX_GRID_DIM);
-        let world_to_grid = grid_dim as f32 * (1.0 / aabb.diagonal::<Vec3>());
+        let world_to_grid = grid_dim as f32 * (1.0 / aabb.diagonal());
         let grid_offset = -Vec3::from(aabb.min) * world_to_grid;
 
         Self {
