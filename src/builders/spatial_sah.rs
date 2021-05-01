@@ -1,6 +1,6 @@
 use crate::{
     builders::{AtomicNodeStack, BuildAlgorithm},
-    Primitive,
+    Primitive, Ray,
 };
 use crate::{utils::*, BuildType};
 use crate::{Aabb, Bvh, BvhNode};
@@ -9,6 +9,7 @@ use rayon::prelude::*;
 use std::{
     cmp::Ordering,
     fmt::Debug,
+    ops::BitAnd,
     sync::atomic::{AtomicUsize, Ordering::SeqCst},
 };
 
@@ -76,23 +77,18 @@ impl Default for SpatialReference {
 }
 
 pub trait SpatialTriangle {
-    fn vertex0(&self) -> [f32; 3];
-    fn vertex1(&self) -> [f32; 3];
-    fn vertex2(&self) -> [f32; 3];
+    fn vertex0(&self) -> Vec3;
+    fn vertex1(&self) -> Vec3;
+    fn vertex2(&self) -> Vec3;
 
     fn split(&self, axis: usize, position: f32) -> (Aabb<i32>, Aabb<i32>) {
-        let p = [
-            Vec3A::from(self.vertex0()),
-            Vec3A::from(self.vertex1()),
-            Vec3A::from(self.vertex2()),
-        ];
+        let p = [self.vertex0(), self.vertex1(), self.vertex2()];
 
         let mut left = Aabb::empty();
         let mut right = Aabb::empty();
 
-        let split_edge = |a: Vec3A, b: Vec3A| -> Vec3A {
-            let t =
-                (Vec3A::splat(position) - Vec3A::splat(a[axis])) / Vec3A::splat(b[axis] - a[axis]);
+        let split_edge = |a: Vec3, b: Vec3| -> Vec3 {
+            let t = (Vec3::splat(position) - Vec3::splat(a[axis])) / Vec3::splat(b[axis] - a[axis]);
             a * t * (b - a)
         };
 
@@ -100,7 +96,7 @@ pub trait SpatialTriangle {
         let q1 = p[1][axis] <= position;
         let q2 = p[2][axis] <= position;
 
-        let mut grow_if = |q: bool, pos: Vec3A| {
+        let mut grow_if = |q: bool, pos: Vec3| {
             if q {
                 left.grow(pos);
             } else {
@@ -129,6 +125,128 @@ pub trait SpatialTriangle {
         }
 
         (left, right)
+    }
+
+    #[inline]
+    fn intersect(&self, ray: &mut Ray) -> bool {
+        let v0 = self.vertex0();
+        let v1 = self.vertex1();
+        let v2 = self.vertex2();
+
+        let edge1 = v1 - v0;
+        let edge2 = v2 - v0;
+        let h_val = ray.direction.cross(edge2);
+        let a_val = edge1.dot(h_val);
+        if a_val > -1e-5 && a_val < 1e-5 {
+            return false;
+        }
+        let f_val = 1.0 / a_val;
+        let s_val = ray.origin - v0.xyz();
+        let u_val = f_val * s_val.dot(h_val);
+        if !(0.0..=1.0).contains(&u_val) {
+            return false;
+        }
+        let q_val = s_val.cross(edge1);
+        let v_val = f_val * ray.direction.dot(q_val);
+        if v_val < 0. || (u_val + v_val) > 1.0 {
+            return false;
+        }
+
+        let t: f32 = f_val * edge2.dot(q_val);
+        if t > ray.t_min && t < ray.t {
+            ray.t = t;
+            true
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    fn intersect4(&self, packet: &mut crate::RayPacket4, t_min: &[f32; 4]) -> Option<[bool; 4]> {
+        let v0 = self.vertex0();
+        let v1 = self.vertex1();
+        let v2 = self.vertex2();
+
+        let zero = Vec4::ZERO;
+        let one = Vec4::ONE;
+
+        let org_x = packet.origin_x;
+        let org_y = packet.origin_y;
+        let org_z = packet.origin_z;
+
+        let dir_x = packet.direction_x;
+        let dir_y = packet.direction_y;
+        let dir_z = packet.direction_z;
+
+        let p0_x = v0.xxxx();
+        let p0_y = v0.yyyy();
+        let p0_z = v0.zzzz();
+
+        let p1_x = v1.xxxx();
+        let p1_y = v1.yyyy();
+        let p1_z = v1.zzzz();
+
+        let p2_x = v2.xxxx();
+        let p2_y = v2.yyyy();
+        let p2_z = v2.zzzz();
+
+        let edge1_x = p1_x - p0_x;
+        let edge1_y = p1_y - p0_y;
+        let edge1_z = p1_z - p0_z;
+
+        let edge2_x = p2_x - p0_x;
+        let edge2_y = p2_y - p0_y;
+        let edge2_z = p2_z - p0_z;
+
+        let h_x = (dir_y * edge2_z) - (dir_z * edge2_y);
+        let h_y = (dir_z * edge2_x) - (dir_x * edge2_z);
+        let h_z = (dir_x * edge2_y) - (dir_y * edge2_x);
+
+        let a = (edge1_x * h_x) + (edge1_y * h_y) + (edge1_z * h_z);
+        let epsilon = Vec4::from([1e-6; 4]);
+        let mask = a.cmple(-epsilon) | a.cmpge(epsilon);
+        if mask.bitmask() == 0 {
+            return None;
+        }
+
+        let f = one / a;
+        let s_x = org_x - p0_x;
+        let s_y = org_y - p0_y;
+        let s_z = org_z - p0_z;
+
+        let u = f * ((s_x * h_x) + (s_y * h_y) + (s_z * h_z));
+        let mask = mask.bitand(u.cmpge(zero) & u.cmple(one));
+        if mask.bitmask() == 0 {
+            return None;
+        }
+
+        let q_x = s_y * edge1_z - s_z * edge1_y;
+        let q_y = s_z * edge1_x - s_x * edge1_z;
+        let q_z = s_x * edge1_y - s_y * edge1_x;
+
+        let v = f * ((dir_x * q_x) + (dir_y * q_y) + (dir_z * q_z));
+        let mask = mask.bitand(v.cmpge(zero) & (u + v).cmple(one));
+        if mask.bitmask() == 0 {
+            return None;
+        }
+
+        let t_min = Vec4::from(*t_min);
+
+        let t_value = f * ((edge2_x * q_x) + (edge2_y * q_y) + (edge2_z * q_z));
+        let mask = mask.bitand(t_value.cmpge(t_min) & t_value.cmplt(packet.t));
+        let bitmask = mask.bitmask();
+        if bitmask == 0 {
+            return None;
+        }
+
+        packet.t = Vec4::select(mask, t_value, packet.t);
+
+        Some([
+            bitmask & 1 != 0,
+            bitmask & 2 != 0,
+            bitmask & 4 != 0,
+            bitmask & 8 != 0,
+        ])
     }
 }
 
@@ -175,10 +293,8 @@ struct SpatialSahBuildTask<'a, T: Primitive<i32> + SpatialTriangle> {
     spatial_threshold: f32,
 }
 
-impl<'a, T: Primitive<i32> + SpatialTriangle>
-    SpatialSahBuildTask<'a, T>
-{
-    #[allow(clippy::clippy::too_many_arguments)]
+impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         builder: &'a SpatialSahBuilder<'a, T>,
         allocator: AtomicNodeStack<'a>,
@@ -596,9 +712,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle>
     }
 }
 
-impl<'a, T: Primitive<i32> + SpatialTriangle> Task
-    for SpatialSahBuildTask<'a, T>
-{
+impl<'a, T: Primitive<i32> + SpatialTriangle> Task for SpatialSahBuildTask<'a, T> {
     fn run(mut self) -> Option<(Self, Self)> {
         let node = self.allocator.get_mut(self.work_item.node).unwrap();
         let spatial_threshold = self.spatial_threshold;
@@ -730,10 +844,8 @@ pub struct SpatialSahBuilder<'a, T: Primitive<i32> + SpatialTriangle> {
     split_factor: f32,
 }
 
-impl<'a, T: Primitive<i32> + SpatialTriangle>
-    SpatialSahBuilder<'a, T>
-{
-    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
+impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuilder<'a, T> {
+    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T], prims_per_leaf: usize) -> Self {
         debug_assert_eq!(aabbs.len(), primitives.len());
 
         Self {
@@ -742,7 +854,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle>
             binning_pass_count: 2,
             max_depth: 64,
             bin_count: 16,
-            max_leaf_size: 5,
+            max_leaf_size: prims_per_leaf,
             traversal_cost: 1.0,
             alpha: 1e-5,
             split_factor: 0.75,
@@ -792,9 +904,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle>
     }
 }
 
-impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm
-    for SpatialSahBuilder<'a, T>
-{
+impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a, T> {
     fn build(self) -> Bvh {
         let prim_count = self.aabbs.len();
         let max_reference_count = prim_count + (prim_count as f32 * self.split_factor) as usize;
@@ -842,7 +952,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm
                 .enumerate()
                 .for_each(|(i, sref)| {
                     sref.aabb = self.aabbs[i];
-                    sref.center = Vec3::from(self.primitives[i].center());
+                    sref.center = self.primitives[i].center();
                     sref.prim_id = i as u32;
                 });
         });
@@ -906,7 +1016,7 @@ mod tests {
     fn test_spatial_sah_build() {
         let (aabbs, primitives) = crate::tests::load_teapot();
 
-        let builder = SpatialSahBuilder::new(aabbs.as_slice(), primitives.as_slice());
+        let builder = SpatialSahBuilder::new(aabbs.as_slice(), primitives.as_slice(), 3);
         let bvh = builder.build();
 
         let bounds = bvh.bounds();
@@ -919,21 +1029,21 @@ mod tests {
                 "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex0())
+                t.vertex0()
             );
             assert!(
                 bounds.contains(t.vertex1()),
                 "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex1())
+                t.vertex1()
             );
             assert!(
                 bounds.contains(t.vertex2()),
                 "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex2())
+                t.vertex2()
             );
         }
     }

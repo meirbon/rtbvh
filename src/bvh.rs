@@ -1,15 +1,18 @@
-use crate::builders::spatial_sah::SpatialTriangle;
-use crate::builders::*;
-use crate::bvh_node::*;
-use crate::mbvh_node::*;
 use crate::{aabb::Bounds, builders::BuildAlgorithm};
+use crate::{builders::spatial_sah::SpatialTriangle, Ray};
+use crate::{builders::*, BvhIterator, MbvhIterator};
+use crate::{bvh_node::*, BvhPacketIterator};
+use crate::{mbvh_node::*, MbvhPacketIterator};
 use crate::{Aabb, RayPacket4};
 use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Copy + Send + Sync {
-    fn center(&self) -> [f32; 3];
+pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>:
+    Debug + Copy + Send + Sync
+{
+    fn center(&self) -> Vec3;
+
     fn aabb(&self) -> Aabb<AabbType>;
 }
 
@@ -24,6 +27,7 @@ pub enum BuildType {
 pub struct Builder<'a, T: Primitive<i32>> {
     pub aabbs: &'a [Aabb<i32>],
     pub primitives: &'a [T],
+    pub primitives_per_leaf: usize,
 }
 
 impl<'a, T: Primitive<i32>> Builder<'a, T> {
@@ -31,7 +35,8 @@ impl<'a, T: Primitive<i32>> Builder<'a, T> {
     where
         T: SpatialTriangle,
     {
-        spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives).build()
+        spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives, self.primitives_per_leaf)
+            .build()
     }
 
     pub fn construct_binned_sah(self) -> Bvh {
@@ -109,123 +114,6 @@ impl Bvh {
         }
     }
 
-    /// Intersect bvh and retrieve the final t value.
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should return a hit record defined by the user
-    #[inline(always)]
-    pub fn traverse<I, R>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> Option<R>
-    where
-        I: FnMut(usize, f32, f32) -> Option<(f32, R)>,
-        R: Copy,
-    {
-        BvhNode::traverse(
-            self.nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// Intersect bvh and retrieve the final t value.
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    #[inline(always)]
-    pub fn traverse_t<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> Option<f32>
-    where
-        I: FnMut(usize, f32, f32) -> Option<f32>,
-    {
-        BvhNode::traverse_t(
-            self.nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// Traverses the bvh and checks whether the ray is occluded
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should return whether the ray hit the object
-    #[inline(always)]
-    pub fn occludes<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> bool
-    where
-        I: FnMut(usize, f32, f32) -> bool,
-    {
-        BvhNode::occludes(
-            self.nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should optionally return a t value and depth value.
-    #[inline(always)]
-    pub fn depth_test<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> (f32, u32)
-    where
-        I: Fn(usize, f32, f32) -> Option<(f32, u32)>,
-    {
-        BvhNode::depth_test(
-            self.nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// intersection_test takes the following arguments (prim_id, ray_packet)
-    #[inline(always)]
-    pub fn traverse4<I>(&self, packet: &mut RayPacket4, intersection_test: I)
-    where
-        I: FnMut(usize, &mut RayPacket4),
-    {
-        BvhNode::traverse4(
-            self.nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            packet,
-            intersection_test,
-        );
-    }
-
     fn traverse_check(&self, cur_node: &BvhNode, checks: &mut [u8]) {
         if let Some(left_first) = cur_node.get_left_first() {
             if cur_node.is_leaf() {
@@ -275,6 +163,22 @@ impl Bvh {
 
     pub fn into_raw(self) -> (Vec<BvhNode>, Vec<u32>) {
         (self.nodes, self.prim_indices)
+    }
+
+    pub fn traverse_iter<'a, T: Primitive>(
+        &'a self,
+        ray: Ray,
+        primitives: &'a [T],
+    ) -> BvhIterator<'a, T> {
+        BvhIterator::new(ray, self, primitives)
+    }
+
+    pub fn traverse_iter_packet<'a, T: Primitive>(
+        &'a self,
+        ray: RayPacket4,
+        primitives: &'a [T],
+    ) -> BvhPacketIterator<'a, T> {
+        BvhPacketIterator::new(ray, self, primitives)
     }
 }
 
@@ -374,123 +278,6 @@ impl Mbvh {
         }
     }
 
-    /// Intersect bvh and retrieve the final t value.
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should return a hit record defined by the user
-    #[inline(always)]
-    pub fn traverse<I, R>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> Option<R>
-    where
-        I: FnMut(usize, f32, f32) -> Option<(f32, R)>,
-        R: Copy,
-    {
-        MbvhNode::traverse(
-            self.m_nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// Intersect bvh and retrieve the final t value.
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    #[inline(always)]
-    pub fn traverse_t<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> Option<f32>
-    where
-        I: FnMut(usize, f32, f32) -> Option<f32>,
-    {
-        MbvhNode::traverse_t(
-            self.m_nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// Traverses the bvh and checks whether the ray is occluded
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should return whether the ray hit the object
-    #[inline(always)]
-    pub fn occludes<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        intersection_test: I,
-    ) -> bool
-    where
-        I: FnMut(usize, f32, f32) -> bool,
-    {
-        MbvhNode::occludes(
-            self.m_nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            intersection_test,
-        )
-    }
-
-    /// intersection_test takes the following arguments (prim_id, t_min, t_max)
-    /// and should optionally return a t value and depth value.
-    #[inline(always)]
-    pub fn depth_test<I>(
-        &self,
-        origin: &[f32; 3],
-        direction: &[f32; 3],
-        t_min: f32,
-        t_max: f32,
-        depth_test: I,
-    ) -> (f32, u32)
-    where
-        I: Fn(usize, f32, f32) -> Option<(f32, u32)>,
-    {
-        MbvhNode::depth_test(
-            self.m_nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            Vec3A::from(*origin),
-            Vec3A::from(*direction),
-            t_min,
-            t_max,
-            depth_test,
-        )
-    }
-
-    /// intersection_test takes the following arguments (prim_id, ray_packet)
-    #[inline(always)]
-    pub fn traverse4<I>(&self, packet: &mut RayPacket4, intersection_test: I)
-    where
-        I: FnMut(usize, &mut RayPacket4),
-    {
-        MbvhNode::traverse4(
-            self.m_nodes.as_slice(),
-            self.prim_indices.as_slice(),
-            packet,
-            intersection_test,
-        );
-    }
-
     pub fn into_raw_indices(self) -> Vec<u32> {
         self.prim_indices
     }
@@ -501,6 +288,22 @@ impl Mbvh {
 
     pub fn into_raw(self) -> (Vec<MbvhNode>, Vec<u32>) {
         (self.m_nodes, self.prim_indices)
+    }
+
+    pub fn traverse_iter<'a, T: Primitive>(
+        &'a self,
+        ray: Ray,
+        primitives: &'a [T],
+    ) -> MbvhIterator<'a, T> {
+        MbvhIterator::new(ray, self, primitives)
+    }
+
+    pub fn traverse_iter_packed<'a, T: Primitive>(
+        &'a self,
+        ray: RayPacket4,
+        primitives: &'a [T],
+    ) -> MbvhPacketIterator<'a, T> {
+        MbvhPacketIterator::new(ray, self, primitives)
     }
 }
 
