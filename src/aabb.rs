@@ -171,7 +171,7 @@ impl<E: Debug + Copy> Aabb<E> {
             ray_max = z_max;
         }
 
-        if ray_max > 0.0 {
+        if ray_max > ray.t_min {
             Some(ray_max)
         } else {
             None

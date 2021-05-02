@@ -293,7 +293,7 @@ fn main() {
         primitives: primitives.as_slice(),
         primitives_per_leaf: 3,
     }
-    .construct_spatial_sah();
+    .construct_binned_sah();
 
     let mbvh = Mbvh::from(bvh.clone());
 
@@ -319,7 +319,7 @@ fn main() {
     let screen_size = (fov * 0.5 / (180.0 / std::f32::consts::PI)).tan();
     let up = Vec3::Y;
     let right = Vec3::Z.cross(up);
-    let pos = vec3(0.0, 0.0, -100.0);
+    let pos = vec3(0.0, 1.5, -100.0);
     let center = pos + Vec3::Z;
 
     let aspect_ratio = 1024.0 / 640.0;

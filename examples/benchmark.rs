@@ -146,9 +146,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -161,9 +161,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_par_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -184,7 +184,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 3)).into_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -198,7 +198,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in bvh.traverse_iter_packet(packet, &primitives) {
+        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
@@ -212,7 +212,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -226,8 +226,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in bvh.traverse_iter_packet(packet, &primitives) {
-            let _result = triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -246,9 +246,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -261,9 +261,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_par_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
 
@@ -278,7 +278,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -292,7 +292,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(packet, &primitives) {
+        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
@@ -306,7 +306,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -320,7 +320,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(packet, &primitives) {
+        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
@@ -351,9 +351,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -366,9 +366,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_par_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -389,7 +389,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 3)).into_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -403,7 +403,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in bvh.traverse_iter_packet(packet, &primitives) {
+        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
@@ -417,7 +417,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -431,8 +431,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in bvh.traverse_iter_packet(packet, &primitives) {
-            let _result = triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -452,8 +452,8 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(ray, &primitives) {
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
             let _result = triangle.intersect(ray);
         }
     });
@@ -467,9 +467,9 @@ fn main() {
 
     let timer = Timer::new();
     (0..RAYS).into_par_iter().for_each(|_| {
-        let ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(ray, &primitives) {
-            let _result = triangle.intersect(ray);
+        let mut ray = rtbvh::Ray::new(origin, direction);
+        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
+            triangle.intersect(ray);
         }
     });
 
@@ -484,7 +484,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -498,7 +498,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(packet, &primitives) {
+        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
@@ -512,7 +512,7 @@ fn main() {
 
     let timer = Timer::new();
     (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let packet = rtbvh::RayPacket4 {
+        let mut packet = rtbvh::RayPacket4 {
             origin_x,
             origin_y,
             origin_z,
@@ -526,7 +526,7 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(packet, &primitives) {
+        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
             triangle.intersect4(packet, &[1e-5; 4]);
         }
     });
