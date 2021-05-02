@@ -15,7 +15,7 @@ struct Triangle {
 }
 
 const PRIMS_PER_LEAF: usize = 1;
-const RAYS: usize = 100_000_000;
+const RAYS: usize = 10_000_000;
 
 impl bvh::aabb::Bounded for Triangle {
     fn aabb(&self) -> bvh::aabb::AABB {
@@ -239,7 +239,6 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    // =========== binned sah
     println!();
     let timer = Timer::default();
     let mbvh = rtbvh::Mbvh::from(bvh);

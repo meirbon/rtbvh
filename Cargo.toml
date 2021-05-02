@@ -29,3 +29,5 @@ wasm_support = ["wasm-bindgen"]
 l3d = "0.1"
 rayon = "1.5"
 bvh = "0.5"
+winit = "0.24.0"
+pixels = "0.2.0"

@@ -161,11 +161,13 @@ impl<'a, T: Primitive> Iterator for BvhPacketIterator<'a, T> {
 pub struct MbvhIterator<'a, T: Primitive> {
     ray: Ray,
     hit: MbvhHit,
+    current: usize,
     i: i32,
     j: i32,
     stack: [i32; 32],
     stack_ptr: i32,
-    bvh: &'a Mbvh,
+    indices: &'a [u32],
+    nodes: &'a [MbvhNode],
     primitives: &'a [T],
 }
 
@@ -175,11 +177,13 @@ impl<'a, T: Primitive> MbvhIterator<'a, T> {
         Self {
             ray,
             hit,
+            current: 0,
             i: 0,
             j: 0,
             stack: [0; 32],
-            stack_ptr: 0,
-            bvh,
+            stack_ptr: -1,
+            indices: &bvh.prim_indices,
+            nodes: &bvh.m_nodes,
             primitives,
         }
     }
@@ -190,46 +194,41 @@ impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.stack_ptr < 0 {
-                return None;
-            }
-
-            let left_first = self.stack[self.stack_ptr as usize] as usize;
+            let node = unsafe { self.nodes.get_unchecked(self.current as usize) };
 
             if self.i >= 4 {
+                if self.stack_ptr < 0 {
+                    return None;
+                }
+
+                self.current = self.stack[self.stack_ptr as usize] as usize;
                 self.stack_ptr -= 1;
-                self.hit = self.bvh.m_nodes[left_first].intersect(&self.ray);
+                self.hit = unsafe { self.nodes.get_unchecked(self.current).intersect(&self.ray) };
                 self.i = 0;
             } else {
-                let id = self.hit.ids[self.i as usize] as usize;
-                if self.hit.result[id] {
-                    let count = self.bvh.m_nodes[left_first].counts[id];
-                    let left_first = self.bvh.m_nodes[left_first].children[id];
+                let id = unsafe { *self.hit.ids.get_unchecked(self.i as usize) } as usize;
+                if unsafe { *self.hit.result.get_unchecked(id) } {
+                    let count = node.counts[id];
+                    let left_first = node.children[id];
+
                     if count > -1 {
                         if self.j < count {
-                            let prim_id = self.bvh.prim_indices[(left_first + self.j) as usize];
+                            let prim_id = unsafe {
+                                *self.indices.get_unchecked((left_first + self.j) as usize)
+                            };
                             self.j += 1;
-                            self.stack_ptr += 1;
-                            return Some((&self.primitives[prim_id as usize], unsafe {
-                                std::mem::transmute::<&mut Ray, &'a mut Ray>(&mut self.ray)
-                            }));
+                            if let Some(prim) = self.primitives.get(prim_id as usize) {
+                                return Some((prim, unsafe {
+                                    std::mem::transmute::<&mut Ray, &'a mut Ray>(&mut self.ray)
+                                }));
+                            }
                         }
                         self.j = 0;
-                    } else if left_first >= 0 {
+                    } else if left_first > -1 {
                         self.stack_ptr += 1;
-                        let stack_ptr = self.stack_ptr as usize;
-                        self.stack[stack_ptr] = left_first;
-
-                        #[cfg(all(
-                            any(target_arch = "x86_64", target_arch = "x86"),
-                            not(feature = "wasm_support")
-                        ))]
                         unsafe {
-                            core::arch::x86_64::_mm_prefetch(
-                                self.bvh.m_nodes.as_ptr().add(left_first as usize) as *const i8,
-                                core::arch::x86_64::_MM_HINT_T0,
-                            )
-                        };
+                            *self.stack.get_unchecked_mut(self.stack_ptr as usize) = left_first;
+                        }
                     }
                 }
                 self.i += 1;
@@ -241,6 +240,7 @@ impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
 pub struct MbvhPacketIterator<'a, T: Primitive> {
     ray: RayPacket4,
     hit: MbvhHit,
+    current: i32,
     i: i32,
     j: i32,
     stack: [i32; 32],
@@ -255,10 +255,11 @@ impl<'a, T: Primitive> MbvhPacketIterator<'a, T> {
         Self {
             ray,
             hit,
+            current: 0,
             i: 0,
             j: 0,
             stack: [0; 32],
-            stack_ptr: 0,
+            stack_ptr: -1,
             bvh,
             primitives,
         }
@@ -270,46 +271,36 @@ impl<'a, T: Primitive> Iterator for MbvhPacketIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.stack_ptr < 0 {
-                return None;
-            }
-
-            let left_first = self.stack[self.stack_ptr as usize] as usize;
+            let node_id = self.current as usize;
 
             if self.i >= 4 {
+                if self.stack_ptr < 0 {
+                    return None;
+                }
+
+                self.current = self.stack[self.stack_ptr as usize];
                 self.stack_ptr -= 1;
-                self.hit = self.bvh.m_nodes[left_first].intersect4(&self.ray);
+                self.hit = self.bvh.m_nodes[self.current as usize].intersect4(&self.ray);
                 self.i = 0;
             } else {
                 let id = self.hit.ids[self.i as usize] as usize;
                 if self.hit.result[id] {
-                    let count = self.bvh.m_nodes[left_first].counts[id];
-                    let left_first = self.bvh.m_nodes[left_first].children[id];
+                    let count = self.bvh.m_nodes[node_id].counts[id];
+                    let left_first = self.bvh.m_nodes[node_id].children[id];
                     if count > -1 {
                         if self.j < count {
                             let prim_id = self.bvh.prim_indices[(left_first + self.j) as usize];
                             self.j += 1;
-                            self.stack_ptr += 1;
                             return Some((&self.primitives[prim_id as usize], unsafe {
-                                std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(&mut self.ray)
+                                std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(
+                                    &mut self.ray,
+                                )
                             }));
                         }
                         self.j = 0;
-                    } else if left_first >= 0 {
+                    } else if left_first > -1 {
                         self.stack_ptr += 1;
-                        let stack_ptr = self.stack_ptr as usize;
-                        self.stack[stack_ptr] = left_first;
-
-                        #[cfg(all(
-                            any(target_arch = "x86_64", target_arch = "x86"),
-                            not(feature = "wasm_support")
-                        ))]
-                        unsafe {
-                            core::arch::x86_64::_mm_prefetch(
-                                self.bvh.m_nodes.as_ptr().add(left_first as usize) as *const i8,
-                                core::arch::x86_64::_MM_HINT_T0,
-                            )
-                        };
+                        self.stack[self.stack_ptr as usize] = left_first;
                     }
                 }
                 self.i += 1;
