@@ -165,7 +165,7 @@ impl Bvh {
 
     pub fn traverse_iter<'a, T: Primitive>(
         &'a self,
-        ray: Ray,
+        ray: &'a mut Ray,
         primitives: &'a [T],
     ) -> BvhIterator<'a, T> {
         BvhIterator::new(ray, self, primitives)
@@ -173,7 +173,7 @@ impl Bvh {
 
     pub fn traverse_iter_packet<'a, T: Primitive>(
         &'a self,
-        ray: RayPacket4,
+        ray: &'a mut RayPacket4,
         primitives: &'a [T],
     ) -> BvhPacketIterator<'a, T> {
         BvhPacketIterator::new(ray, self, primitives)
@@ -290,7 +290,7 @@ impl Mbvh {
 
     pub fn traverse_iter<'a, T: Primitive>(
         &'a self,
-        ray: Ray,
+        ray: &'a mut Ray,
         primitives: &'a [T],
     ) -> MbvhIterator<'a, T> {
         MbvhIterator::new(ray, self, primitives)
@@ -298,7 +298,7 @@ impl Mbvh {
 
     pub fn traverse_iter_packed<'a, T: Primitive>(
         &'a self,
-        ray: RayPacket4,
+        ray: &'a mut RayPacket4,
         primitives: &'a [T],
     ) -> MbvhPacketIterator<'a, T> {
         MbvhPacketIterator::new(ray, self, primitives)

@@ -5,11 +5,32 @@ use rayon::prelude::*;
 use rtbvh::spatial_sah::SpatialTriangle;
 use rtbvh::*;
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
+
+enum BvhToUse {
+    Bvh = 0,
+    Mbvh = 1,
+    AltBvh = 2,
+}
+
+impl std::fmt::Display for BvhToUse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BvhToUse::Bvh => "Bvh",
+                BvhToUse::Mbvh => "Mbvh",
+                BvhToUse::AltBvh => "bvh-0.5",
+            }
+        )
+    }
+}
 
 pub struct Timer {
     moment: Instant,
@@ -44,13 +65,26 @@ impl Default for Timer {
     }
 }
 
-#[repr(align(64))]
+#[repr(align(16))]
 #[derive(Debug, Copy, Clone)]
 struct Triangle {
     vertex0: Vec4,
     vertex1: Vec4,
     vertex2: Vec4,
+    normal: Vec3,
     id: usize,
+}
+
+impl Triangle {
+    pub fn new(p0: Vec4, p1: Vec4, p2: Vec4) -> Self {
+        Self {
+            vertex0: p0,
+            vertex1: p1,
+            vertex2: p2,
+            normal: (p1.xyz() - p0.xyz()).cross(p2.xyz() - p0.xyz()).normalize(),
+            id: 0,
+        }
+    }
 }
 
 impl Primitive for Triangle {
@@ -81,6 +115,25 @@ impl SpatialTriangle for Triangle {
     }
 }
 
+impl bvh::aabb::Bounded for Triangle {
+    fn aabb(&self) -> bvh::aabb::AABB {
+        bvh::aabb::AABB::empty()
+            .grow(&(*self.vertex0.xyz().as_ref()).into())
+            .grow(&(*self.vertex1.xyz().as_ref()).into())
+            .grow(&(*self.vertex2.xyz().as_ref()).into())
+    }
+}
+
+impl bvh::bounding_hierarchy::BHShape for Triangle {
+    fn set_bh_node_index(&mut self, id: usize) {
+        self.id = id;
+    }
+
+    fn bh_node_index(&self) -> usize {
+        self.id
+    }
+}
+
 #[derive(Default, Debug, Copy, Clone)]
 pub struct CameraView3D {
     pub pos: Vec3,
@@ -95,6 +148,23 @@ pub struct CameraView3D {
 }
 
 impl CameraView3D {
+    pub fn translate_target(&mut self, offset: Vec3) {
+        self.direction = (self.direction - offset.x * self.right - offset.y * self.up).normalize();
+
+        let screen_size = (self.fov * 0.5 / (180.0 / std::f32::consts::PI)).tan();
+        let up = Vec3::Y;
+        let right = self.direction.cross(up);
+
+        let center = self.pos + self.direction;
+
+        self.p1 = center - screen_size * right * self.aspect_ratio + screen_size * up;
+        let p2 = center + screen_size * right * self.aspect_ratio + screen_size * up;
+        let p3 = center - screen_size * right * self.aspect_ratio - screen_size * up;
+
+        self.right = p2 - self.p1;
+        self.up = p3 - self.p1;
+    }
+
     pub fn translate(&mut self, offset: Vec3) {
         let screen_size = (self.fov * 0.5 / (180.0 / std::f32::consts::PI)).tan();
         let up = Vec3::Y;
@@ -208,16 +278,10 @@ fn main() {
         LoadResult::None(_) => panic!(),
     };
 
-    let primitives = mesh
+    let mut primitives = mesh
         .vertices
         .chunks_exact(3)
-        .enumerate()
-        .map(|(id, c)| Triangle {
-            vertex0: Vec4::from(c[0]),
-            vertex1: Vec4::from(c[1]),
-            vertex2: Vec4::from(c[2]),
-            id,
-        })
+        .map(|c| Triangle::new(Vec4::from(c[0]), Vec4::from(c[1]), Vec4::from(c[2])))
         .collect::<Vec<Triangle>>();
     let aabbs = primitives
         .iter()
@@ -232,6 +296,8 @@ fn main() {
     .construct_spatial_sah();
 
     let mbvh = Mbvh::from(bvh.clone());
+
+    let alt_bvh = bvh::bvh::BVH::build(&mut primitives);
 
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::WindowBuilder::new()
@@ -278,7 +344,7 @@ fn main() {
     let mut timer = Timer::default();
     let mut averager = Averager::default();
 
-    let mut use_mbvh = false;
+    let mut bvh_to_use = BvhToUse::Bvh;
     event_loop.run(move |event, _, cf| {
         *cf = ControlFlow::Poll;
 
@@ -306,7 +372,11 @@ fn main() {
                 timer.reset();
                 averager.add_sample(1024.0 * 640.0 / 1_000_000.0 / (elapsed / 10.0));
 
-                let title = format!("Mbvh: {}, {:.3} MRays/s", use_mbvh, averager.get_average());
+                let title = format!(
+                    "Bvh: {}, {:.3} MRays/s",
+                    bvh_to_use,
+                    averager.get_average()
+                );
                 window.set_title(title.as_str());
 
                 if keys
@@ -319,14 +389,19 @@ fn main() {
                 }
 
                 if keys.get(&VirtualKeyCode::Key1).map(|k| *k).unwrap_or(false) {
-                    use_mbvh = false;
+                    bvh_to_use = BvhToUse::Bvh;
                 }
 
                 if keys.get(&VirtualKeyCode::Key2).map(|k| *k).unwrap_or(false) {
-                    use_mbvh = true;
+                    bvh_to_use = BvhToUse::Mbvh;
+                }
+
+                if keys.get(&VirtualKeyCode::Key3).map(|k| *k).unwrap_or(false) {
+                    bvh_to_use = BvhToUse::AltBvh;
                 }
 
                 let mut offset = Vec3::ZERO;
+                let mut view_offset = Vec3::ZERO;
                 if keys.get(&VirtualKeyCode::W).map(|k| *k).unwrap_or(false) {
                     offset += Vec3::Z;
                 }
@@ -351,15 +426,37 @@ fn main() {
                     offset -= Vec3::Y;
                 }
 
+                if keys.get(&VirtualKeyCode::Up).map(|k| *k).unwrap_or(false) {
+                    view_offset += Vec3::Y;
+                }
+
+                if keys.get(&VirtualKeyCode::Down).map(|k| *k).unwrap_or(false) {
+                    view_offset -= Vec3::Y;
+                }
+
+                if keys.get(&VirtualKeyCode::Left).map(|k| *k).unwrap_or(false) {
+                    view_offset += Vec3::X;
+                }
+
+                if keys
+                    .get(&VirtualKeyCode::Right)
+                    .map(|k| *k)
+                    .unwrap_or(false)
+                {
+                    view_offset -= Vec3::X;
+                }
+
                 if keys
                     .get(&VirtualKeyCode::LShift)
                     .map(|k| *k)
                     .unwrap_or(false)
                 {
                     offset *= 10.0;
+                    view_offset *= 2.0;
                 }
 
                 camera.translate(offset * elapsed);
+                camera.translate_target(view_offset * elapsed / 10.0);
 
                 window.request_redraw();
 
@@ -371,27 +468,48 @@ fn main() {
                         let x = i as u32 % 1024;
                         let y = i as u32 / 1024;
 
-                        let ray = camera.generate_ray(x, y);
+                        let mut ray = camera.generate_ray(x, y);
+                        let mut t = None;
+                        let r = bvh::ray::Ray::new(
+                            (*ray.origin.as_ref()).into(),
+                            (*ray.direction.as_ref()).into(),
+                        );
 
-                        let mut t = 1e34_f32;
-                        if use_mbvh {
-                            for (triangle, r) in mbvh.traverse_iter(ray, &primitives) {
-                                if triangle.intersect(r) {
-                                    t = t.min(r.t);
+                        match bvh_to_use {
+                            BvhToUse::Bvh => {
+                                for (triangle, r) in bvh.traverse_iter(&mut ray, &primitives) {
+                                    if triangle.intersect(r) {
+                                        t = Some(triangle);
+                                    }
                                 }
                             }
-                        } else {
-                            for (triangle, r) in bvh.traverse_iter(ray, &primitives) {
-                                if triangle.intersect(r) {
-                                    t = t.min(r.t);
+                            BvhToUse::Mbvh => {
+                                for (triangle, r) in mbvh.traverse_iter(&mut ray, &primitives) {
+                                    if triangle.intersect(r) {
+                                        t = Some(triangle);
+                                    }
+                                }
+                            }
+                            BvhToUse::AltBvh => {
+                                for triangle in alt_bvh.traverse_iterator(&r, &primitives) {
+                                    if triangle.intersect(&mut ray) {
+                                        t = Some(triangle);
+                                    }
                                 }
                             }
                         }
 
-                        if t < 1e20 {
-                            pixel[0] = 255;
-                            pixel[1] = 0;
-                            pixel[2] = 0;
+                        if let Some(triangle) = t {
+                            let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
+                                * Vec3::splat(255.0);
+
+                            let r = normal.x as u8;
+                            let g = normal.y as u8;
+                            let b = normal.z as u8;
+
+                            pixel[0] = r;
+                            pixel[1] = g;
+                            pixel[2] = b;
                             pixel[0] = 255;
                         } else {
                             for i in 0..4 {
