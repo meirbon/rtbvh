@@ -296,7 +296,7 @@ impl Mbvh {
         MbvhIterator::new(ray, self, primitives)
     }
 
-    pub fn traverse_iter_packed<'a, T: Primitive>(
+    pub fn traverse_iter_packet<'a, T: Primitive>(
         &'a self,
         ray: &'a mut RayPacket4,
         primitives: &'a [T],

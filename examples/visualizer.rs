@@ -12,10 +12,13 @@ use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
 
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 enum BvhToUse {
     Bvh = 0,
     Mbvh = 1,
     AltBvh = 2,
+    BvhPacket = 3,
+    MbvhPacket = 4,
 }
 
 impl std::fmt::Display for BvhToUse {
@@ -27,6 +30,8 @@ impl std::fmt::Display for BvhToUse {
                 BvhToUse::Bvh => "Bvh",
                 BvhToUse::Mbvh => "Mbvh",
                 BvhToUse::AltBvh => "bvh-0.5",
+                BvhToUse::BvhPacket => "Bvh-packet",
+                BvhToUse::MbvhPacket => "Mbvh-packet",
             }
         )
     }
@@ -195,14 +200,7 @@ impl CameraView3D {
         Ray::new(self.pos, direction)
     }
 
-    pub fn generate_ray4(&self, x: [u32; 4], y: [u32; 4], width: u32) -> RayPacket4 {
-        let ids = [
-            x[0] + y[0] * width,
-            x[1] + y[1] * width,
-            x[2] + y[2] * width,
-            x[3] + y[3] * width,
-        ];
-
+    pub fn generate_ray4(&self, x: [u32; 4], y: [u32; 4], ids: [u32; 4]) -> RayPacket4 {
         let x = [x[0] as f32, x[1] as f32, x[2] as f32, x[3] as f32];
         let y = [y[0] as f32, y[1] as f32, y[2] as f32, y[3] as f32];
 
@@ -212,13 +210,13 @@ impl CameraView3D {
         let u = x * self.inv_width;
         let v = y * self.inv_height;
 
-        let p_x = Vec4::from([self.p1[0]; 4]) + u * self.p1[0] + v * self.up[0];
-        let p_y = Vec4::from([self.p1[1]; 4]) + u * self.p1[1] + v * self.up[1];
-        let p_z = Vec4::from([self.p1[2]; 4]) + u * self.p1[2] + v * self.up[2];
+        let p_x = Vec4::splat(self.p1[0]) + u * self.right[0] + v * self.up[0];
+        let p_y = Vec4::splat(self.p1[1]) + u * self.right[1] + v * self.up[1];
+        let p_z = Vec4::splat(self.p1[2]) + u * self.right[2] + v * self.up[2];
 
-        let direction_x = p_x - Vec4::from([self.pos[0]; 4]);
-        let direction_y = p_y - Vec4::from([self.pos[1]; 4]);
-        let direction_z = p_z - Vec4::from([self.pos[2]; 4]);
+        let direction_x = p_x - Vec4::splat(self.pos[0]);
+        let direction_y = p_y - Vec4::splat(self.pos[1]);
+        let direction_z = p_z - Vec4::splat(self.pos[2]);
 
         let length_squared = direction_x * direction_x;
         let length_squared = length_squared + direction_y * direction_y;
@@ -372,11 +370,7 @@ fn main() {
                 timer.reset();
                 averager.add_sample(1024.0 * 640.0 / 1_000_000.0 / (elapsed / 10.0));
 
-                let title = format!(
-                    "Bvh: {}, {:.3} MRays/s",
-                    bvh_to_use,
-                    averager.get_average()
-                );
+                let title = format!("Bvh: {}, {:.3} MRays/s", bvh_to_use, averager.get_average());
                 window.set_title(title.as_str());
 
                 if keys
@@ -398,6 +392,14 @@ fn main() {
 
                 if keys.get(&VirtualKeyCode::Key3).map(|k| *k).unwrap_or(false) {
                     bvh_to_use = BvhToUse::AltBvh;
+                }
+
+                if keys.get(&VirtualKeyCode::Key4).map(|k| *k).unwrap_or(false) {
+                    bvh_to_use = BvhToUse::BvhPacket;
+                }
+
+                if keys.get(&VirtualKeyCode::Key5).map(|k| *k).unwrap_or(false) {
+                    bvh_to_use = BvhToUse::MbvhPacket;
                 }
 
                 let mut offset = Vec3::ZERO;
@@ -461,62 +463,129 @@ fn main() {
                 window.request_redraw();
 
                 let frame = pixels.get_frame();
-                frame
-                    .par_chunks_exact_mut(4)
-                    .enumerate()
-                    .for_each(|(i, pixel)| {
-                        let x = i as u32 % 1024;
-                        let y = i as u32 / 1024;
+                if bvh_to_use == BvhToUse::BvhPacket || bvh_to_use == BvhToUse::MbvhPacket {
+                    frame
+                        .par_chunks_exact_mut(16)
+                        .enumerate()
+                        .for_each(|(i, pixels)| {
+                            let i = i * 4;
+                            let x = i as u32 % 1024;
+                            let y = i as u32 / 1024;
+                            let mut packet =
+                                camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4], [0; 4]);
 
-                        let mut ray = camera.generate_ray(x, y);
-                        let mut t = None;
-                        let r = bvh::ray::Ray::new(
-                            (*ray.origin.as_ref()).into(),
-                            (*ray.direction.as_ref()).into(),
-                        );
-
-                        match bvh_to_use {
-                            BvhToUse::Bvh => {
-                                for (triangle, r) in bvh.traverse_iter(&mut ray, &primitives) {
-                                    if triangle.intersect(r) {
-                                        t = Some(triangle);
+                            let t_min = Vec4::splat(1e-4);
+                            let mut triangles = [None; 4];
+                            match bvh_to_use {
+                                BvhToUse::BvhPacket => {
+                                    for (triangle, packet) in
+                                        bvh.traverse_iter_packet(&mut packet, &primitives)
+                                    {
+                                        if let Some(result) = triangle.intersect4(packet, t_min) {
+                                            for i in 0..4 {
+                                                if result[i] {
+                                                    triangles[i] = Some(triangle);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                            BvhToUse::Mbvh => {
-                                for (triangle, r) in mbvh.traverse_iter(&mut ray, &primitives) {
-                                    if triangle.intersect(r) {
-                                        t = Some(triangle);
+                                BvhToUse::MbvhPacket => {
+                                    for (triangle, packet) in
+                                        mbvh.traverse_iter_packet(&mut packet, &primitives)
+                                    {
+                                        if let Some(result) = triangle.intersect4(packet, t_min) {
+                                            for i in 0..4 {
+                                                if result[i] {
+                                                    triangles[i] = Some(triangle);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
+                                _ => {}
                             }
-                            BvhToUse::AltBvh => {
-                                for triangle in alt_bvh.traverse_iterator(&r, &primitives) {
-                                    if triangle.intersect(&mut ray) {
-                                        t = Some(triangle);
-                                    }
-                                }
-                            }
-                        }
 
-                        if let Some(triangle) = t {
-                            let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
-                                * Vec3::splat(255.0);
-
-                            let r = normal.x as u8;
-                            let g = normal.y as u8;
-                            let b = normal.z as u8;
-
-                            pixel[0] = r;
-                            pixel[1] = g;
-                            pixel[2] = b;
-                            pixel[0] = 255;
-                        } else {
                             for i in 0..4 {
-                                pixel[i] = 0;
+                                let offset = i * 4;
+                                if let Some(triangle) = triangles[i] {
+                                    let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
+                                        * Vec3::splat(255.0);
+
+                                    let r = normal.x as u8;
+                                    let g = normal.y as u8;
+                                    let b = normal.z as u8;
+
+                                    pixels[offset + 0] = r;
+                                    pixels[offset + 1] = g;
+                                    pixels[offset + 2] = b;
+                                    pixels[offset + 0] = 255;
+                                } else {
+                                    for i in 0..4 {
+                                        pixels[offset + i] = 0;
+                                    }
+                                }
                             }
-                        }
-                    });
+                        });
+                } else {
+                    frame
+                        .par_chunks_exact_mut(4)
+                        .enumerate()
+                        .for_each(|(i, pixel)| {
+                            let x = i as u32 % 1024;
+                            let y = i as u32 / 1024;
+
+                            let mut ray = camera.generate_ray(x, y);
+                            let mut t = None;
+                            let r = bvh::ray::Ray::new(
+                                (*ray.origin.as_ref()).into(),
+                                (*ray.direction.as_ref()).into(),
+                            );
+
+                            match bvh_to_use {
+                                BvhToUse::Bvh => {
+                                    for (triangle, r) in bvh.traverse_iter(&mut ray, &primitives) {
+                                        if triangle.intersect(r) {
+                                            t = Some(triangle);
+                                        }
+                                    }
+                                }
+                                BvhToUse::Mbvh => {
+                                    for (triangle, r) in mbvh.traverse_iter(&mut ray, &primitives) {
+                                        if triangle.intersect(r) {
+                                            t = Some(triangle);
+                                        }
+                                    }
+                                }
+                                BvhToUse::AltBvh => {
+                                    for triangle in alt_bvh.traverse_iterator(&r, &primitives) {
+                                        if triangle.intersect(&mut ray) {
+                                            t = Some(triangle);
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+
+                            if let Some(triangle) = t {
+                                let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
+                                    * Vec3::splat(255.0);
+
+                                let r = normal.x as u8;
+                                let g = normal.y as u8;
+                                let b = normal.z as u8;
+
+                                pixel[0] = r;
+                                pixel[1] = g;
+                                pixel[2] = b;
+                                pixel[0] = 255;
+                            } else {
+                                for i in 0..4 {
+                                    pixel[i] = 0;
+                                }
+                            }
+                        });
+                }
 
                 if pixels.render().is_err() {
                     *cf = ControlFlow::Exit;

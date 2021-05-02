@@ -199,7 +199,7 @@ fn main() {
         };
 
         for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -227,7 +227,7 @@ fn main() {
         };
 
         for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -292,8 +292,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -320,8 +320,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -404,7 +404,7 @@ fn main() {
         };
 
         for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -432,7 +432,7 @@ fn main() {
         };
 
         for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -498,8 +498,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
@@ -526,8 +526,8 @@ fn main() {
             t: [1e34; 4].into(),
         };
 
-        for (triangle, packet) in mbvh.traverse_iter_packed(&mut packet, &primitives) {
-            triangle.intersect4(packet, &[1e-5; 4]);
+        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
+            triangle.intersect4(packet, Vec4::splat(1e-4));
         }
     });
     let elapsed = timer.elapsed_in_millis();
