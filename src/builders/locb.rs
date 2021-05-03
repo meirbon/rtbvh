@@ -244,9 +244,7 @@ impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Primitive<i32>> BuildAlgorithm
-    for LocallyOrderedClusteringBuilder<'a, T>
-{
+impl<'a, T: Primitive<i32>> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T> {
     fn build(self) -> Bvh {
         debug_assert!(!self.aabbs.is_empty());
 
@@ -327,8 +325,6 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spatial_sah::SpatialTriangle;
-    use crate::Bounds;
 
     #[test]
     fn test_locb_build() {
@@ -347,21 +343,21 @@ mod tests {
                 "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex0())
+                t.vertex0()
             );
             assert!(
                 bounds.contains(t.vertex1()),
                 "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex1())
+                t.vertex1()
             );
             assert!(
                 bounds.contains(t.vertex2()),
                 "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex2())
+                t.vertex2()
             );
         }
     }

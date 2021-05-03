@@ -384,8 +384,7 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spatial_sah::SpatialTriangle;
-    use crate::Bounds;
+    use crate::*;
 
     #[test]
     fn test_binned_sah_build() {
@@ -404,21 +403,21 @@ mod tests {
                 "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex0())
+                t.vertex0()
             );
             assert!(
                 bounds.contains(t.vertex1()),
                 "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex1())
+                t.vertex1()
             );
             assert!(
                 bounds.contains(t.vertex2()),
                 "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex2())
+                t.vertex2()
             );
         }
     }

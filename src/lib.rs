@@ -19,7 +19,7 @@ pub use iter::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{spatial_sah::SpatialTriangle, Aabb, Builder, Primitive};
+    use crate::{SpatialTriangle, Aabb, Builder, Primitive};
 
     #[test]
     fn test_sah() {

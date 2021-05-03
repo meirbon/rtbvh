@@ -4,9 +4,13 @@ use crate::utils::UnsafeSliceWrapper;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
 
-pub mod binned_sah;
-pub mod locb;
-pub mod spatial_sah;
+mod binned_sah;
+mod locb;
+mod spatial_sah;
+
+pub use binned_sah::*;
+pub use locb::*;
+pub use spatial_sah::*;
 
 pub trait BuildAlgorithm {
     fn build(self) -> Bvh;

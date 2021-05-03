@@ -1,9 +1,4 @@
-use crate::{aabb::Bounds, builders::BuildAlgorithm};
-use crate::{builders::spatial_sah::SpatialTriangle, Ray};
-use crate::{builders::*, BvhIterator, MbvhIterator};
-use crate::{bvh_node::*, BvhPacketIterator};
-use crate::{mbvh_node::*, MbvhPacketIterator};
-use crate::{Aabb, RayPacket4};
+use crate::*;
 use glam::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -33,16 +28,15 @@ impl<'a, T: Primitive<i32>> Builder<'a, T> {
     where
         T: SpatialTriangle,
     {
-        spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives, self.primitives_per_leaf)
-            .build()
+        SpatialSahBuilder::new(self.aabbs, self.primitives, self.primitives_per_leaf).build()
     }
 
     pub fn construct_binned_sah(self) -> Bvh {
-        binned_sah::BinnedSahBuilder::new(self.aabbs, self.primitives).build()
+        BinnedSahBuilder::new(self.aabbs, self.primitives).build()
     }
 
     pub fn construct_locally_ordered_clustered(self) -> Bvh {
-        locb::LocallyOrderedClusteringBuilder::new(self.aabbs, self.primitives).build()
+        LocallyOrderedClusteringBuilder::new(self.aabbs, self.primitives).build()
     }
 }
 
@@ -163,20 +157,36 @@ impl Bvh {
         (self.nodes, self.prim_indices)
     }
 
-    pub fn traverse_iter<'a, T: Primitive>(
+    pub fn traverse_iter<'a, 'b, T: 'static + Primitive>(
         &'a self,
-        ray: &'a mut Ray,
+        ray: &'b mut Ray,
         primitives: &'a [T],
-    ) -> BvhIterator<'a, T> {
+    ) -> BvhIterator<'a, 'b, T> {
         BvhIterator::new(ray, self, primitives)
     }
 
-    pub fn traverse_iter_packet<'a, T: Primitive>(
+    pub fn traverse_iter_packet<'a, 'b, T: 'static + Primitive>(
         &'a self,
-        ray: &'a mut RayPacket4,
+        ray: &'b mut RayPacket4,
         primitives: &'a [T],
-    ) -> BvhPacketIterator<'a, T> {
+    ) -> BvhPacketIterator<'a, 'b, T> {
         BvhPacketIterator::new(ray, self, primitives)
+    }
+}
+
+impl<'a, T: 'static + Primitive> IntoRayIterator<'a, 'a, T> for Bvh {
+    type RIterator = BvhIterator<'a, 'a, T>;
+
+    fn iter(&'a self, ray: &'a mut Ray, primitives: &'a [T]) -> Self::RIterator {
+        BvhIterator::new(ray, self, primitives)
+    }
+}
+
+impl<'a, T: 'static + Primitive> IntoPacketIterator<'a, 'a, T> for Bvh {
+    type RIterator = BvhPacketIterator<'a, 'a, T>;
+
+    fn iter(&'a self, packet: &'a mut RayPacket4, primitives: &'a [T]) -> Self::RIterator {
+        BvhPacketIterator::new(packet, self, primitives)
     }
 }
 
@@ -288,19 +298,19 @@ impl Mbvh {
         (self.m_nodes, self.prim_indices)
     }
 
-    pub fn traverse_iter<'a, T: Primitive>(
+    pub fn traverse_iter<'a, 'b, T: Primitive>(
         &'a self,
-        ray: &'a mut Ray,
+        ray: &'b mut Ray,
         primitives: &'a [T],
-    ) -> MbvhIterator<'a, T> {
+    ) -> MbvhIterator<'a, 'b, T> {
         MbvhIterator::new(ray, self, primitives)
     }
 
-    pub fn traverse_iter_packet<'a, T: Primitive>(
+    pub fn traverse_iter_packet<'a, 'b, T: Primitive>(
         &'a self,
-        ray: &'a mut RayPacket4,
+        ray: &'b mut RayPacket4,
         primitives: &'a [T],
-    ) -> MbvhPacketIterator<'a, T> {
+    ) -> MbvhPacketIterator<'a, 'b, T> {
         MbvhPacketIterator::new(ray, self, primitives)
     }
 }
@@ -320,5 +330,21 @@ impl Bounds<i32> for Bvh {
 impl Bounds<i32> for Mbvh {
     fn bounds(&self) -> Aabb {
         self.nodes[0].bounds
+    }
+}
+
+impl<'a, T: 'static + Primitive> IntoRayIterator<'a, 'a, T> for Mbvh {
+    type RIterator = MbvhIterator<'a, 'a, T>;
+
+    fn iter(&'a self, ray: &'a mut Ray, primitives: &'a [T]) -> Self::RIterator {
+        MbvhIterator::new(ray, self, primitives)
+    }
+}
+
+impl<'a, T: 'static + Primitive> IntoPacketIterator<'a, 'a, T> for Mbvh {
+    type RIterator = MbvhPacketIterator<'a, 'a, T>;
+
+    fn iter(&'a self, packet: &'a mut RayPacket4, primitives: &'a [T]) -> Self::RIterator {
+        MbvhPacketIterator::new(packet, self, primitives)
     }
 }
