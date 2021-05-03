@@ -1,6 +1,6 @@
 [package]
 name = "rtbvh"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -9,9 +9,6 @@ repository = "https://github.com/meirbon/rtbvh"
 description = "BVH library with various build algorithms and high performance using packet traversal."
 keywords = ["ray", "tracing", "bvh", "sah", "fast"]
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
 crossbeam = "0.8"
 glam = { version = "0.14", features = ["serde"] }
@@ -19,11 +16,9 @@ num_cpus = "1.13"
 rayon = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 num = "0.4"
-wasm-bindgen = { version = "0.2", optional = true }
 
 [features]
 default = []
-wasm_support = ["wasm-bindgen"]
 
 [dev-dependencies]
 l3d = "0.1"
