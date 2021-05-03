@@ -193,9 +193,8 @@ impl CameraView3D {
     pub fn generate_ray(&self, x: u32, y: u32) -> Ray {
         let u = x as f32 * self.inv_width;
         let v = y as f32 * self.inv_height;
-        let point_on_pixel =
-            Vec3::from(self.p1) + u * Vec3::from(self.right) + v * Vec3::from(self.up);
-        let direction = (point_on_pixel - Vec3::from(self.pos)).normalize();
+        let point_on_pixel = self.p1 + u * self.right + v * self.up;
+        let direction = (point_on_pixel - self.pos).normalize();
 
         Ray::new(self.pos, direction)
     }
@@ -249,19 +248,22 @@ impl CameraView3D {
             inv_direction_x: 1.0 / direction_x,
             inv_direction_y: 1.0 / direction_y,
             inv_direction_z: 1.0 / direction_z,
-            t: [1e34 as f32; 4].into(),
+            t: [1e34_f32; 4].into(),
             pixel_ids: ids.into(),
         }
     }
 
     fn calculate_matrix(&self) -> (Vec3, Vec3, Vec3) {
         let y: Vec3 = Vec3::new(0.0, 1.0, 0.0);
-        let z: Vec3 = Vec3::from(self.direction).normalize();
+        let z: Vec3 = self.direction.normalize();
         let x: Vec3 = z.cross(y).normalize();
         let y: Vec3 = x.cross(z).normalize();
         (x, y, z)
     }
 }
+
+const WIDTH: usize = 1280;
+const HEIGHT: usize = 720;
 
 fn main() {
     let loader = LoadInstance::new().with_default();
@@ -299,7 +301,7 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::WindowBuilder::new()
-        .with_inner_size(LogicalSize::new(1024, 640))
+        .with_inner_size(LogicalSize::new(WIDTH as u32, HEIGHT as u32))
         .with_resizable(false)
         .with_title("rtbvh")
         .build(&event_loop)
@@ -308,7 +310,7 @@ fn main() {
     let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(1024, 640, surface_texture).unwrap()
+        Pixels::new(WIDTH as u32, HEIGHT as u32, surface_texture).unwrap()
     };
 
     let mut keys: HashMap<VirtualKeyCode, bool> = HashMap::new();
@@ -320,7 +322,7 @@ fn main() {
     let pos = vec3(0.0, 1.5, -100.0);
     let center = pos + Vec3::Z;
 
-    let aspect_ratio = 1024.0 / 640.0;
+    let aspect_ratio = WIDTH as f32 / HEIGHT as f32;
     let p1 = center - screen_size * right * aspect_ratio + screen_size * up;
     let p2 = center + screen_size * right * aspect_ratio + screen_size * up;
     let p3 = center - screen_size * right * aspect_ratio - screen_size * up;
@@ -333,13 +335,14 @@ fn main() {
         up,
         p1,
         direction: Vec3::Z,
-        inv_width: 1.0 / 1024.0,
-        inv_height: 1.0 / 640.0,
+        inv_width: 1.0 / WIDTH as f32,
+        inv_height: 1.0 / HEIGHT as f32,
         aspect_ratio,
         fov,
     };
 
     let mut timer = Timer::default();
+    let mut rt_timer = Timer::default();
     let mut averager = Averager::default();
 
     let mut bvh_to_use = BvhToUse::Bvh;
@@ -368,91 +371,78 @@ fn main() {
             Event::MainEventsCleared => {
                 let elapsed = timer.elapsed_in_millis() / 100.0;
                 timer.reset();
-                averager.add_sample(1024.0 * 640.0 / 1_000_000.0 / (elapsed / 10.0));
 
                 let title = format!("Bvh: {}, {:.3} MRays/s", bvh_to_use, averager.get_average());
                 window.set_title(title.as_str());
 
-                if keys
-                    .get(&VirtualKeyCode::Escape)
-                    .map(|k| *k)
-                    .unwrap_or(false)
-                {
+                if keys.get(&VirtualKeyCode::Escape).copied().unwrap_or(false) {
                     *cf = ControlFlow::Exit;
                     return;
                 }
 
-                if keys.get(&VirtualKeyCode::Key1).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Key1).copied().unwrap_or(false) {
                     bvh_to_use = BvhToUse::Bvh;
                 }
 
-                if keys.get(&VirtualKeyCode::Key2).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Key2).copied().unwrap_or(false) {
                     bvh_to_use = BvhToUse::Mbvh;
                 }
 
-                if keys.get(&VirtualKeyCode::Key3).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Key3).copied().unwrap_or(false) {
                     bvh_to_use = BvhToUse::AltBvh;
                 }
 
-                if keys.get(&VirtualKeyCode::Key4).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Key4).copied().unwrap_or(false) {
                     bvh_to_use = BvhToUse::BvhPacket;
                 }
 
-                if keys.get(&VirtualKeyCode::Key5).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Key5).copied().unwrap_or(false) {
                     bvh_to_use = BvhToUse::MbvhPacket;
                 }
 
                 let mut offset = Vec3::ZERO;
                 let mut view_offset = Vec3::ZERO;
-                if keys.get(&VirtualKeyCode::W).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::W).copied().unwrap_or(false) {
                     offset += Vec3::Z;
                 }
 
-                if keys.get(&VirtualKeyCode::S).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::S).copied().unwrap_or(false) {
                     offset -= Vec3::Z;
                 }
 
-                if keys.get(&VirtualKeyCode::A).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::A).copied().unwrap_or(false) {
                     offset += Vec3::X;
                 }
 
-                if keys.get(&VirtualKeyCode::D).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::D).copied().unwrap_or(false) {
                     offset -= Vec3::X;
                 }
 
-                if keys.get(&VirtualKeyCode::E).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::E).copied().unwrap_or(false) {
                     offset += Vec3::Y;
                 }
 
-                if keys.get(&VirtualKeyCode::Q).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Q).copied().unwrap_or(false) {
                     offset -= Vec3::Y;
                 }
 
-                if keys.get(&VirtualKeyCode::Up).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Up).copied().unwrap_or(false) {
                     view_offset += Vec3::Y;
                 }
 
-                if keys.get(&VirtualKeyCode::Down).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Down).copied().unwrap_or(false) {
                     view_offset -= Vec3::Y;
                 }
 
-                if keys.get(&VirtualKeyCode::Left).map(|k| *k).unwrap_or(false) {
+                if keys.get(&VirtualKeyCode::Left).copied().unwrap_or(false) {
                     view_offset += Vec3::X;
                 }
 
-                if keys
-                    .get(&VirtualKeyCode::Right)
-                    .map(|k| *k)
-                    .unwrap_or(false)
-                {
+                if keys.get(&VirtualKeyCode::Right).copied().unwrap_or(false) {
                     view_offset -= Vec3::X;
                 }
 
-                if keys
-                    .get(&VirtualKeyCode::LShift)
-                    .map(|k| *k)
-                    .unwrap_or(false)
-                {
+                if keys.get(&VirtualKeyCode::LShift).copied().unwrap_or(false) {
                     offset *= 10.0;
                     view_offset *= 2.0;
                 }
@@ -463,14 +453,16 @@ fn main() {
                 window.request_redraw();
 
                 let frame = pixels.get_frame();
+                rt_timer.reset();
+
                 if bvh_to_use == BvhToUse::BvhPacket || bvh_to_use == BvhToUse::MbvhPacket {
                     frame
                         .par_chunks_exact_mut(16)
                         .enumerate()
-                        .for_each(|(i, pixels)| {
-                            let i = i * 4;
-                            let x = i as u32 % 1024;
-                            let y = i as u32 / 1024;
+                        .for_each(|(mut i, pixels)| {
+                            i *= 4;
+                            let x = i as u32 % WIDTH as u32;
+                            let y = i as u32 / WIDTH as u32;
                             let mut packet =
                                 camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4], [0; 4]);
 
@@ -506,20 +498,16 @@ fn main() {
                                 _ => {}
                             }
 
-                            for i in 0..4 {
+                            for (i, triangle) in triangles.iter().enumerate() {
                                 let offset = i * 4;
-                                if let Some(triangle) = triangles[i] {
+                                if let Some(triangle) = triangle {
                                     let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
                                         * Vec3::splat(255.0);
 
-                                    let r = normal.x as u8;
-                                    let g = normal.y as u8;
-                                    let b = normal.z as u8;
-
-                                    pixels[offset + 0] = r;
-                                    pixels[offset + 1] = g;
-                                    pixels[offset + 2] = b;
-                                    pixels[offset + 0] = 255;
+                                    pixels[offset] = normal.x as u8;
+                                    pixels[offset + 1] = normal.y as u8;
+                                    pixels[offset + 2] = normal.z as u8;
+                                    pixels[offset + 3] = 255;
                                 } else {
                                     for i in 0..4 {
                                         pixels[offset + i] = 0;
@@ -532,8 +520,8 @@ fn main() {
                         .par_chunks_exact_mut(4)
                         .enumerate()
                         .for_each(|(i, pixel)| {
-                            let x = i as u32 % 1024;
-                            let y = i as u32 / 1024;
+                            let x = i as u32 % WIDTH as u32;
+                            let y = i as u32 / WIDTH as u32;
 
                             let mut ray = camera.generate_ray(x, y);
                             let mut t = None;
@@ -571,25 +559,24 @@ fn main() {
                                 let normal = triangle.normal.xyz().clamp(Vec3::ZERO, Vec3::ONE)
                                     * Vec3::splat(255.0);
 
-                                let r = normal.x as u8;
-                                let g = normal.y as u8;
-                                let b = normal.z as u8;
-
-                                pixel[0] = r;
-                                pixel[1] = g;
-                                pixel[2] = b;
-                                pixel[0] = 255;
+                                pixel[0] = normal.x as u8;
+                                pixel[1] = normal.y as u8;
+                                pixel[2] = normal.z as u8;
+                                pixel[3] = 255;
                             } else {
-                                for i in 0..4 {
-                                    pixel[i] = 0;
-                                }
+                                pixel.iter_mut().for_each(|p| *p = 0);
                             }
                         });
                 }
 
+                averager.add_sample(
+                    WIDTH as f32 * HEIGHT as f32
+                        / 1_000_000.0
+                        / (rt_timer.elapsed_in_millis() / 1000.0),
+                );
+
                 if pixels.render().is_err() {
                     *cf = ControlFlow::Exit;
-                    return;
                 }
             }
             Event::RedrawRequested(_) => {}
