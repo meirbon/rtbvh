@@ -1,10 +1,6 @@
 [package]
 name = "rtbvh_ffi"
-<<<<<<< HEAD
 version = "0.5.0"
-=======
-version = "0.4.2"
->>>>>>> de7c608cd3970d309761e4954184b70b967fdcd8
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 build = "build.rs"

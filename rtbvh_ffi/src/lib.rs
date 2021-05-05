@@ -2,7 +2,7 @@
 use glam::*;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
-use rtbvh::{spatial_sah::SpatialTriangle, *};
+use rtbvh::*;
 use std::num::NonZeroUsize;
 
 lazy_static! {
