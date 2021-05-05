@@ -5,8 +5,9 @@ use crate::{bvh_node::*, BvhPacketIterator};
 use crate::{mbvh_node::*, MbvhPacketIterator};
 use crate::{Aabb, RayPacket4};
 use glam::*;
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use rayon::prelude::*;
+use std::fmt::{Debug, Formatter};
+use std::num::NonZeroUsize;
 
 pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Send + Sync {
     fn center(&self) -> Vec3;
@@ -14,7 +15,8 @@ pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Send + 
     fn aabb(&self) -> Aabb<AabbType>;
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum BuildType {
     None,
     LocallyOrderedClustered,
@@ -22,32 +24,148 @@ pub enum BuildType {
     Spatial,
 }
 
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum BuildError {
+    NoPrimitives,
+    InequalAabbsAndPrimitives(usize, usize),
+}
+
+impl std::fmt::Display for BuildError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuildError::NoPrimitives => "No primitives supplied".to_owned(),
+                BuildError::InequalAabbsAndPrimitives(bbs, prims) => {
+                    format!("#Aabbs({}) != #Primitives({})", *bbs, *prims)
+                }
+            }
+        )
+    }
+}
+
+impl std::error::Error for BuildError {}
+
+#[derive(Debug, Copy, Clone)]
 pub struct Builder<'a, T: Primitive<i32>> {
-    pub aabbs: &'a [Aabb<i32>],
+    /// Reference to aabbs
+    pub aabbs: Option<&'a [Aabb<i32>]>,
+    /// Reference to primitives
     pub primitives: &'a [T],
-    pub primitives_per_leaf: usize,
+    /// Max number of primitives that can be stored in a leaf node
+    pub primitives_per_leaf: Option<NonZeroUsize>,
 }
 
 impl<'a, T: Primitive<i32>> Builder<'a, T> {
-    pub fn construct_spatial_sah(self) -> Bvh
+    pub fn construct_spatial_sah(self) -> Result<Bvh, BuildError>
     where
         T: SpatialTriangle,
     {
-        spatial_sah::SpatialSahBuilder::new(self.aabbs, self.primitives, self.primitives_per_leaf)
-            .build()
+        if self.primitives.is_empty() {
+            return Err(BuildError::NoPrimitives);
+        }
+
+        if let Some(aabbs) = self.aabbs {
+            if aabbs.len() != self.primitives.len() {
+                return Err(BuildError::InequalAabbsAndPrimitives(
+                    aabbs.len(),
+                    self.primitives.len(),
+                ));
+            }
+
+            Ok(spatial_sah::SpatialSahBuilder::new(
+                aabbs,
+                self.primitives,
+                self.primitives_per_leaf,
+            )
+            .build())
+        } else {
+            let aabbs = self
+                .primitives
+                .iter()
+                .par_bridge()
+                .map(|p| p.aabb())
+                .collect::<Vec<_>>();
+            Ok(spatial_sah::SpatialSahBuilder::new(
+                &aabbs,
+                self.primitives,
+                self.primitives_per_leaf,
+            )
+            .build())
+        }
     }
 
-    pub fn construct_binned_sah(self) -> Bvh {
-        binned_sah::BinnedSahBuilder::new(self.aabbs, self.primitives).build()
+    pub fn construct_binned_sah(self) -> Result<Bvh, BuildError> {
+        if self.primitives.is_empty() {
+            return Err(BuildError::NoPrimitives);
+        }
+
+        if let Some(aabbs) = self.aabbs {
+            if aabbs.len() != self.primitives.len() {
+                return Err(BuildError::InequalAabbsAndPrimitives(
+                    aabbs.len(),
+                    self.primitives.len(),
+                ));
+            }
+
+            Ok(
+                binned_sah::BinnedSahBuilder::new(
+                    &aabbs,
+                    self.primitives,
+                    self.primitives_per_leaf,
+                )
+                .build(),
+            )
+        } else {
+            let aabbs = self
+                .primitives
+                .iter()
+                .par_bridge()
+                .map(|p| p.aabb())
+                .collect::<Vec<_>>();
+
+            Ok(
+                binned_sah::BinnedSahBuilder::new(
+                    &aabbs,
+                    self.primitives,
+                    self.primitives_per_leaf,
+                )
+                .build(),
+            )
+        }
     }
 
-    pub fn construct_locally_ordered_clustered(self) -> Bvh {
-        locb::LocallyOrderedClusteringBuilder::new(self.aabbs, self.primitives).build()
+    pub fn construct_locally_ordered_clustered(self) -> Result<Bvh, BuildError> {
+        if self.primitives.is_empty() {
+            return Err(BuildError::NoPrimitives);
+        }
+
+        if let Some(aabbs) = self.aabbs {
+            if aabbs.len() != self.primitives.len() {
+                return Err(BuildError::InequalAabbsAndPrimitives(
+                    aabbs.len(),
+                    self.primitives.len(),
+                ));
+            }
+
+            Ok(locb::LocallyOrderedClusteringBuilder::new(aabbs, self.primitives).build())
+        } else {
+            let aabbs = self
+                .primitives
+                .iter()
+                .par_bridge()
+                .map(|p| p.aabb())
+                .collect::<Vec<_>>();
+
+            Ok(locb::LocallyOrderedClusteringBuilder::new(&aabbs, self.primitives).build())
+        }
     }
 }
 
 // A BVH structure with nodes and primitive indices
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 pub struct Bvh {
     pub(crate) nodes: Vec<BvhNode>,
     pub(crate) prim_indices: Vec<u32>,
@@ -180,7 +298,8 @@ impl Bvh {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 pub struct Mbvh {
     pub(crate) nodes: Vec<BvhNode>,
     pub(crate) m_nodes: Vec<MbvhNode>,

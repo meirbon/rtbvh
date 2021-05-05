@@ -1,11 +1,12 @@
+use crate::utils::*;
 use crate::{
     builders::{AtomicNodeStack, BuildAlgorithm},
-    Primitive,
+    BuildType, Primitive,
 };
-use crate::{utils::*, BuildType};
 use crate::{Aabb, Bvh, BvhNode};
 use glam::*;
 use std::fmt::Debug;
+use std::num::NonZeroUsize;
 use std::sync::atomic::AtomicUsize;
 
 #[derive(Debug, Copy, Clone)]
@@ -43,7 +44,7 @@ struct BinnedSahBuildTask<'a, T: Primitive<i32>> {
 }
 
 impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
-    pub fn new(
+    pub(crate) fn new(
         builder: &'a BinnedSahBuilder<'a, T>,
         allocator: AtomicNodeStack<'a>,
         prim_indices: &'a mut [u32],
@@ -76,7 +77,7 @@ impl<'a, T: Primitive<i32>> BinnedSahBuildTask<'a, T> {
         }
     }
 
-    pub fn find_split(&mut self, axis: usize) -> SahSplit {
+    pub(crate) fn find_split(&mut self, axis: usize) -> SahSplit {
         let bins = self.bins_per_axis[axis].as_mut_slice();
 
         let mut current_box = Aabb::empty();
@@ -289,6 +290,7 @@ impl<'a, T: Primitive<i32>> Task for BinnedSahBuildTask<'a, T> {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct BinnedSahBuilder<'a, T: Primitive<i32>> {
     aabbs: &'a [Aabb<i32>],
     primitives: &'a [T],
@@ -298,39 +300,43 @@ pub struct BinnedSahBuilder<'a, T: Primitive<i32>> {
     traversal_cost: f32,
 }
 
+#[allow(dead_code)]
 impl<'a, T: Primitive<i32>> BinnedSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
-        debug_assert_eq!(aabbs.len(), primitives.len());
+    pub(crate) fn new(
+        aabbs: &'a [Aabb<i32>],
+        primitives: &'a [T],
+        primitives_per_leaf: Option<NonZeroUsize>,
+    ) -> Self {
         Self {
             aabbs,
             primitives,
             max_depth: 64,
             bin_count: 16,
-            max_leaf_size: 5,
+            max_leaf_size: primitives_per_leaf.map(|p| p.get()).unwrap_or(1),
             traversal_cost: 1.0,
         }
     }
 
     /// Maximum depth of tree
-    pub fn with_max_depth(mut self, depth: usize) -> Self {
+    pub(crate) fn with_max_depth(mut self, depth: usize) -> Self {
         self.max_depth = depth;
         self
     }
 
     /// Maximum number of bins to check for splitting a node
-    pub fn with_bin_count(mut self, bin_count: usize) -> Self {
+    pub(crate) fn with_bin_count(mut self, bin_count: usize) -> Self {
         self.bin_count = bin_count;
         self
     }
 
     /// Maximum number of primitives inside a node
-    pub fn with_max_leaf_size(mut self, max_leaf_size: usize) -> Self {
+    pub(crate) fn with_max_leaf_size(mut self, max_leaf_size: usize) -> Self {
         self.max_leaf_size = max_leaf_size;
         self
     }
 
     /// Cost to determine for splitting a node with the SAH algorithm for traversing a node
-    pub fn with_traversal_cost(mut self, traversal_cost: f32) -> Self {
+    pub(crate) fn with_traversal_cost(mut self, traversal_cost: f32) -> Self {
         self.traversal_cost = traversal_cost;
         self
     }
@@ -338,6 +344,10 @@ impl<'a, T: Primitive<i32>> BinnedSahBuilder<'a, T> {
 
 impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
     fn build(self) -> Bvh {
+        if self.primitives.len() != self.aabbs.len() || self.primitives.is_empty() || self.aabbs.is_empty() {
+            return Bvh::default();
+        }
+
         let prim_count = self.aabbs.len();
         let mut nodes = vec![BvhNode::new(); prim_count * 2 - 1];
         let mut prim_indices: Vec<u32> = (0..prim_count).into_iter().map(|i| i as u32).collect();
@@ -386,12 +396,30 @@ mod tests {
     use super::*;
     use crate::spatial_sah::SpatialTriangle;
     use crate::Bounds;
+    use crate::tests::Triangle;
+
+    #[test]
+    fn no_primitives() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = BinnedSahBuilder::new(&[], primitives.as_slice(), None);
+        assert!(builder.build().nodes.is_empty());
+
+        let builder: BinnedSahBuilder<Triangle> = BinnedSahBuilder::new(&aabbs, &[], None);
+        assert!(builder.build().nodes.is_empty());
+
+        let builder = BinnedSahBuilder::new(&aabbs, &primitives, None);
+        let build = builder.build();
+        assert!(!build.nodes.is_empty());
+        assert!(build.nodes.len() >= aabbs.len());
+        assert!(build.nodes.len() <= (2 * aabbs.len()));
+    }
 
     #[test]
     fn test_binned_sah_build() {
         let (aabbs, primitives) = crate::tests::load_teapot();
 
-        let builder = BinnedSahBuilder::new(aabbs.as_slice(), primitives.as_slice());
+        let builder = BinnedSahBuilder::new(aabbs.as_slice(), primitives.as_slice(), None);
         let bvh = builder.build();
 
         let bounds = bvh.bounds();

@@ -2,24 +2,56 @@ mod aabb;
 mod builders;
 mod bvh;
 mod bvh_node;
+mod iter;
 mod mbvh_node;
 mod morton;
 mod ray;
 mod utils;
-mod iter;
 
+pub use crate::bvh::*;
 pub use aabb::*;
 pub use builders::*;
-pub use crate::bvh::*;
 pub use bvh_node::*;
+pub use iter::*;
 pub use mbvh_node::*;
 pub use morton::*;
 pub use ray::*;
-pub use iter::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{spatial_sah::SpatialTriangle, Aabb, Builder, Primitive};
+    use crate::{spatial_sah::SpatialTriangle, Aabb, Builder, Primitive, BuildError};
+
+    #[test]
+    fn test_invalid_input() {
+        let builder: Builder<Triangle> = Builder {
+            aabbs: None,
+            primitives: &[],
+            primitives_per_leaf: None
+        };
+        assert_eq!(builder.construct_binned_sah().unwrap_err(), BuildError::NoPrimitives);
+
+        let builder: Builder<Triangle> = Builder {
+            aabbs: None,
+            primitives: &[Triangle {
+                vertex0: Default::default(),
+                vertex1: Default::default(),
+                vertex2: Default::default()
+            }],
+            primitives_per_leaf: None
+        };
+        assert!(builder.construct_binned_sah().is_ok());
+
+        let builder: Builder<Triangle> = Builder {
+            aabbs: Some(&[]),
+            primitives: &[Triangle {
+                vertex0: Default::default(),
+                vertex1: Default::default(),
+                vertex2: Default::default()
+            }],
+            primitives_per_leaf: None
+        };
+        assert_eq!(builder.construct_binned_sah().unwrap_err(), BuildError::InequalAabbsAndPrimitives(0, 1));
+    }
 
     #[test]
     fn test_sah() {
@@ -44,11 +76,11 @@ mod tests {
         ];
         let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
-            aabbs: aabbs.as_slice(),
+            aabbs: Some(aabbs.as_slice()),
             primitives: primitives.as_slice(),
-            primitives_per_leaf: 1,
+            primitives_per_leaf: None,
         };
-        builder.construct_binned_sah();
+        assert!(builder.construct_binned_sah().is_ok());
     }
 
     #[test]
@@ -74,11 +106,11 @@ mod tests {
         ];
         let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
-            aabbs: aabbs.as_slice(),
+            aabbs: Some(aabbs.as_slice()),
             primitives: primitives.as_slice(),
-            primitives_per_leaf: 1,
+            primitives_per_leaf: None,
         };
-        builder.construct_locally_ordered_clustered();
+        assert!(builder.construct_locally_ordered_clustered().is_ok());
     }
 
     #[test]
@@ -104,11 +136,11 @@ mod tests {
         ];
         let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         let builder = Builder {
-            aabbs: aabbs.as_slice(),
+            aabbs: Some(aabbs.as_slice()),
             primitives: primitives.as_slice(),
-            primitives_per_leaf: 1,
+            primitives_per_leaf: None,
         };
-        builder.construct_spatial_sah();
+        assert!(builder.construct_spatial_sah().is_ok());
     }
 
     use glam::*;
@@ -193,8 +225,8 @@ mod tests {
                 vertex2: Vec4::from(c[2]),
             })
             .collect::<Vec<Triangle>>();
-        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
 
+        let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         (aabbs, primitives)
     }
 }

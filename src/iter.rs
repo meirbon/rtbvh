@@ -1,5 +1,6 @@
 use crate::*;
 
+#[derive(Debug)]
 pub struct BvhIterator<'a, T: Primitive> {
     ray: &'a mut Ray,
     i: i32,
@@ -11,11 +12,17 @@ pub struct BvhIterator<'a, T: Primitive> {
 
 impl<'a, T: Primitive> BvhIterator<'a, T> {
     pub fn new(ray: &'a mut Ray, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
+        let stack_ptr = if bvh.nodes.is_empty() || primitives.is_empty() {
+            -1
+        } else {
+            0
+        };
+
         Self {
             ray,
             i: 0,
             stack: [0; 32],
-            stack_ptr: 0,
+            stack_ptr,
             bvh,
             primitives,
         }
@@ -73,6 +80,7 @@ impl<'a, T: Primitive> Iterator for BvhIterator<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct BvhPacketIterator<'a, T: Primitive> {
     ray: &'a mut RayPacket4,
     i: i32,
@@ -84,11 +92,17 @@ pub struct BvhPacketIterator<'a, T: Primitive> {
 
 impl<'a, T: Primitive> BvhPacketIterator<'a, T> {
     pub fn new(ray: &'a mut RayPacket4, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
+        let stack_ptr = if bvh.nodes.is_empty() || primitives.is_empty() {
+            -1
+        } else {
+            0
+        };
+
         Self {
             ray,
             i: 0,
             stack: [0; 32],
-            stack_ptr: 0,
+            stack_ptr,
             bvh,
             primitives,
         }
@@ -146,6 +160,7 @@ impl<'a, T: Primitive> Iterator for BvhPacketIterator<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct MbvhIterator<'a, T: Primitive> {
     ray: &'a mut Ray,
     hit: MbvhHit,
@@ -161,7 +176,11 @@ pub struct MbvhIterator<'a, T: Primitive> {
 
 impl<'a, T: Primitive> MbvhIterator<'a, T> {
     pub fn new(ray: &'a mut Ray, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
-        let hit = bvh.m_nodes[0].intersect(&ray);
+        let hit = bvh
+            .m_nodes
+            .get(0)
+            .map(|n| n.intersect(&ray))
+            .unwrap_or_default();
         Self {
             ray,
             hit,
@@ -229,6 +248,7 @@ impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct MbvhPacketIterator<'a, T: Primitive> {
     ray: &'a mut RayPacket4,
     hit: MbvhHit,

@@ -1,6 +1,11 @@
 use glam::*;
 
-#[derive(Copy, Clone, PartialEq)]
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(align(16))]
 pub struct Ray {
     pub origin: Vec3,
     pub t_min: f32,
@@ -36,8 +41,9 @@ impl From<Ray> for (Vec3, Vec3) {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(align(16))]
-#[derive(Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct RayPacket4 {
     pub origin_x: Vec4,
     pub origin_y: Vec4,
@@ -147,17 +153,6 @@ impl RayPacket4 {
     pub fn t(&self) -> Vec4 {
         self.t
     }
-}
-
-#[derive(Copy, Clone)]
-pub struct ShadowPacket4 {
-    pub origin_x: Vec4,
-    pub origin_y: Vec4,
-    pub origin_z: Vec4,
-    pub direction_x: Vec4,
-    pub direction_y: Vec4,
-    pub direction_z: Vec4,
-    pub t_max: Vec4,
 }
 
 #[allow(dead_code)]

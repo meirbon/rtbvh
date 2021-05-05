@@ -1,6 +1,6 @@
 [package]
 name = "rtbvh"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ crossbeam = "0.8"
 glam = { version = "0.14", features = ["serde"] }
 num_cpus = "1.13"
 rayon = "1.5"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
 num = "0.4"
 wasm-bindgen = { version = "0.2", optional = true }
 

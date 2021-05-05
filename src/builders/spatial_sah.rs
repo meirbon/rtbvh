@@ -6,6 +6,7 @@ use crate::{utils::*, BuildType};
 use crate::{Aabb, Bvh, BvhNode};
 use glam::*;
 use rayon::prelude::*;
+use std::num::NonZeroUsize;
 use std::{
     cmp::Ordering,
     fmt::Debug,
@@ -253,7 +254,7 @@ struct WorkItem {
 }
 
 impl WorkItem {
-    pub fn new(
+    pub(crate) fn new(
         node: usize,
         begin: usize,
         end: usize,
@@ -270,7 +271,7 @@ impl WorkItem {
             is_sorted,
         }
     }
-    pub fn work_size(&self) -> usize {
+    pub(crate) fn work_size(&self) -> usize {
         self.end - self.begin
     }
 }
@@ -361,7 +362,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         best_split
     }
 
-    pub fn allocate_children(
+    pub(crate) fn allocate_children(
         &mut self,
         right_begin: usize,
         right_end: usize,
@@ -837,17 +838,20 @@ pub struct SpatialSahBuilder<'a, T: Primitive<i32> + SpatialTriangle> {
     split_factor: f32,
 }
 
+#[allow(dead_code)]
 impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T], prims_per_leaf: usize) -> Self {
-        debug_assert_eq!(aabbs.len(), primitives.len());
-
+    pub(crate) fn new(
+        aabbs: &'a [Aabb<i32>],
+        primitives: &'a [T],
+        primitives_per_leaf: Option<NonZeroUsize>,
+    ) -> Self {
         Self {
             aabbs,
             primitives,
             binning_pass_count: 2,
             max_depth: 64,
             bin_count: 16,
-            max_leaf_size: prims_per_leaf,
+            max_leaf_size: primitives_per_leaf.map(|p| p.get()).unwrap_or(1),
             traversal_cost: 1.0,
             alpha: 1e-5,
             split_factor: 0.75,
@@ -857,41 +861,41 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuilder<'a, T> {
     /// Number of spatial binning passes that are run in order to
     /// find a spatial split. This increases accuracy without
     /// increasing the number of bins.
-    pub fn with_binning_pass_count(mut self, pass_count: usize) -> Self {
+    pub(crate) fn with_binning_pass_count(mut self, pass_count: usize) -> Self {
         self.binning_pass_count = pass_count;
         self
     }
 
     /// Maximum depth of tree
-    pub fn with_max_depth(mut self, depth: usize) -> Self {
+    pub(crate) fn with_max_depth(mut self, depth: usize) -> Self {
         self.max_depth = depth;
         self
     }
 
     /// Maximum number of bins to check for splitting a node
-    pub fn with_bin_count(mut self, bin_count: usize) -> Self {
+    pub(crate) fn with_bin_count(mut self, bin_count: usize) -> Self {
         self.bin_count = bin_count;
         self
     }
 
     /// Maximum number of primitives inside a node
-    pub fn with_max_leaf_size(mut self, max_leaf_size: usize) -> Self {
+    pub(crate) fn with_max_leaf_size(mut self, max_leaf_size: usize) -> Self {
         self.max_leaf_size = max_leaf_size;
         self
     }
 
     /// Cost to determine for splitting a node with the SAH algorithm for traversing a node
-    pub fn with_traversal_cost(mut self, traversal_cost: f32) -> Self {
+    pub(crate) fn with_traversal_cost(mut self, traversal_cost: f32) -> Self {
         self.traversal_cost = traversal_cost;
         self
     }
 
-    pub fn with_split_factor(mut self, split_factor: f32) -> Self {
+    pub(crate) fn with_split_factor(mut self, split_factor: f32) -> Self {
         self.split_factor = split_factor;
         self
     }
 
-    pub fn with_alpha(mut self, alpha: f32) -> Self {
+    pub(crate) fn with_alpha(mut self, alpha: f32) -> Self {
         self.alpha = alpha.min(1.0).max(1e-6);
         self
     }
@@ -899,6 +903,13 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuilder<'a, T> {
 
 impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm for SpatialSahBuilder<'a, T> {
     fn build(self) -> Bvh {
+        if self.primitives.len() != self.aabbs.len()
+            || self.primitives.is_empty()
+            || self.aabbs.is_empty()
+        {
+            return Bvh::default();
+        }
+
         let prim_count = self.aabbs.len();
         let max_reference_count = prim_count + (prim_count as f32 * self.split_factor) as usize;
         let reference_count = AtomicUsize::new(0);
@@ -1003,13 +1014,31 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> BuildAlgorithm for SpatialSahBuild
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::Triangle;
     use crate::Bounds;
+
+    #[test]
+    fn no_primitives() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = SpatialSahBuilder::new(&[], primitives.as_slice(), None);
+        assert!(builder.build().nodes.is_empty());
+
+        let builder: SpatialSahBuilder<Triangle> = SpatialSahBuilder::new(&aabbs, &[], None);
+        assert!(builder.build().nodes.is_empty());
+
+        let builder = SpatialSahBuilder::new(&aabbs, &primitives, None);
+        let build = builder.build();
+        assert!(!build.nodes.is_empty());
+        assert!(build.nodes.len() >= aabbs.len());
+        assert!(build.nodes.len() <= (2 * aabbs.len()));
+    }
 
     #[test]
     fn test_spatial_sah_build() {
         let (aabbs, primitives) = crate::tests::load_teapot();
 
-        let builder = SpatialSahBuilder::new(aabbs.as_slice(), primitives.as_slice(), 3);
+        let builder = SpatialSahBuilder::new(aabbs.as_slice(), primitives.as_slice(), None);
         let bvh = builder.build();
 
         let bounds = bvh.bounds();

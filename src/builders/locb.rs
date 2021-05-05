@@ -13,8 +13,9 @@ pub struct LocallyOrderedClusteringBuilder<'a, T: Primitive<i32>> {
     search_radius: usize,
 }
 
+#[allow(dead_code)]
 impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
-    pub fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
+    pub(crate) fn new(aabbs: &'a [Aabb<i32>], primitives: &'a [T]) -> Self {
         let world_bounds = Aabb::union_of_list(aabbs);
         let encoder = MortonEncoder::new(&world_bounds, MortonEncoder::MAX_GRID_DIM);
 
@@ -27,7 +28,7 @@ impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
         }
     }
 
-    pub fn with_search_radius(mut self, radius: usize) -> Self {
+    pub(crate) fn with_search_radius(mut self, radius: usize) -> Self {
         self.search_radius = radius;
         self
     }
@@ -244,11 +245,14 @@ impl<'a, T: Primitive<i32>> LocallyOrderedClusteringBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Primitive<i32>> BuildAlgorithm
-    for LocallyOrderedClusteringBuilder<'a, T>
-{
+impl<'a, T: Primitive<i32>> BuildAlgorithm for LocallyOrderedClusteringBuilder<'a, T> {
     fn build(self) -> Bvh {
-        debug_assert!(!self.aabbs.is_empty());
+        if self.primitives.len() != self.aabbs.len()
+            || self.primitives.is_empty()
+            || self.aabbs.is_empty()
+        {
+            return Bvh::default();
+        }
 
         let prim_count = self.aabbs.len();
         if prim_count <= 2 {
@@ -328,7 +332,26 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm
 mod tests {
     use super::*;
     use crate::spatial_sah::SpatialTriangle;
+    use crate::tests::Triangle;
     use crate::Bounds;
+
+    #[test]
+    fn no_primitives() {
+        let (aabbs, primitives) = crate::tests::load_teapot();
+
+        let builder = LocallyOrderedClusteringBuilder::new(&[], primitives.as_slice());
+        assert!(builder.build().nodes.is_empty());
+
+        let builder: LocallyOrderedClusteringBuilder<Triangle> =
+            LocallyOrderedClusteringBuilder::new(&aabbs, &[]);
+        assert!(builder.build().nodes.is_empty());
+
+        let builder = LocallyOrderedClusteringBuilder::new(&aabbs, &primitives);
+        let build = builder.build();
+        assert!(!build.nodes.is_empty());
+        assert!(build.nodes.len() >= aabbs.len());
+        assert!(build.nodes.len() <= (2 * aabbs.len()));
+    }
 
     #[test]
     fn test_locb_build() {

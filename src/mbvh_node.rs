@@ -1,16 +1,30 @@
 use crate::{bvh_node::*, Ray};
 use crate::{Aabb, RayPacket4};
-use serde::{Deserialize, Serialize};
 
 use glam::*;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(align(8))]
 pub(crate) struct MbvhHit {
     pub(crate) ids: [u8; 4],
     pub(crate) result: [bool; 4],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Default for MbvhHit {
+    fn default() -> Self {
+        Self {
+            ids: [0; 4],
+            result: [false; 4],
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct MbvhNode {
     min_x: [f32; 4],

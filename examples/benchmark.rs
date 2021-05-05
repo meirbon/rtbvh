@@ -2,6 +2,7 @@ use glam::*;
 use l3d::prelude::*;
 use rayon::prelude::*;
 use rtbvh::{spatial_sah::SpatialTriangle, Primitive};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -14,7 +15,7 @@ struct Triangle {
     id: usize,
 }
 
-const PRIMS_PER_LEAF: usize = 1;
+const PRIMS_PER_LEAF: Option<NonZeroUsize> = NonZeroUsize::new(1);
 const RAYS: usize = 10_000_000;
 
 impl bvh::aabb::Bounded for Triangle {
@@ -132,11 +133,12 @@ fn main() {
 
     let timer = Timer::default();
     let bvh = rtbvh::Builder {
-        aabbs: aabbs.as_slice(),
+        aabbs: Some(aabbs.as_slice()),
         primitives: primitives.as_slice(),
         primitives_per_leaf: PRIMS_PER_LEAF,
     }
-    .construct_spatial_sah();
+    .construct_spatial_sah()
+    .unwrap();
 
     println!(
         "Bvh construction with spatial sah type of {} primitives took {} ms",
@@ -337,11 +339,11 @@ fn main() {
     // binned sah bvh
     let timer = Timer::default();
     let bvh = rtbvh::Builder {
-        aabbs: aabbs.as_slice(),
+        aabbs: Some(aabbs.as_slice()),
         primitives: primitives.as_slice(),
         primitives_per_leaf: PRIMS_PER_LEAF,
     }
-    .construct_binned_sah();
+    .construct_binned_sah().unwrap();
 
     println!(
         "Bvh construction with spatial sah type of {} primitives took {} ms",

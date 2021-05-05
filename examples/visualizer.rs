@@ -6,6 +6,7 @@ use rtbvh::spatial_sah::SpatialTriangle;
 use rtbvh::*;
 use std::collections::HashMap;
 use std::fmt::Formatter;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
@@ -289,11 +290,12 @@ fn main() {
         .collect::<Vec<rtbvh::Aabb>>();
 
     let bvh = rtbvh::Builder {
-        aabbs: aabbs.as_slice(),
+        aabbs: Some(aabbs.as_slice()),
         primitives: primitives.as_slice(),
-        primitives_per_leaf: 3,
+        primitives_per_leaf: NonZeroUsize::new(3),
     }
-    .construct_binned_sah();
+    .construct_binned_sah()
+    .unwrap();
 
     let mbvh = Mbvh::from(bvh.clone());
 

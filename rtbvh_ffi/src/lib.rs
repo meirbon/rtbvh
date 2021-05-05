@@ -1,33 +1,53 @@
+#![allow(clippy::upper_case_acronyms)]
 use glam::*;
 use lazy_static::lazy_static;
+use parking_lot::RwLock;
 use rtbvh::{spatial_sah::SpatialTriangle, *};
-use std::sync::Mutex;
+use std::num::NonZeroUsize;
 
 lazy_static! {
     static ref MANAGER: StructureManager = StructureManager::default();
 }
 
 struct StructureManager {
-    structures: Mutex<Vec<Bvh>>,
-    m_structures: Mutex<Vec<Mbvh>>,
+    structures: RwLock<Vec<RwLock<Bvh>>>,
+    m_structures: RwLock<Vec<RwLock<Mbvh>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(C)]
+pub enum ResultCode {
+    Ok = 0,
+    Error = 1,
+    NoPrimitives = 2,
+    InequalAabbsAndPrimitives = 3,
+}
+
+impl From<BuildError> for ResultCode {
+    fn from(err: BuildError) -> Self {
+        match err {
+            BuildError::NoPrimitives => Self::NoPrimitives,
+            BuildError::InequalAabbsAndPrimitives(_, _) => Self::InequalAabbsAndPrimitives,
+        }
+    }
 }
 
 impl Default for StructureManager {
     fn default() -> Self {
         StructureManager {
-            structures: Mutex::new(Vec::new()),
-            m_structures: Mutex::new(Vec::new()),
+            structures: RwLock::new(Vec::new()),
+            m_structures: RwLock::new(Vec::new()),
         }
     }
 }
 
 impl StructureManager {
     pub fn store(&self, bvh: Bvh) -> RTBvh {
-        let mut lock = self.structures.lock().unwrap();
-        lock.push(bvh);
+        let mut lock = self.structures.write();
+        lock.push(RwLock::new(bvh));
         let id = lock.len() - 1;
 
-        let bvh: &Bvh = &lock[id];
+        let bvh = lock[id].read();
 
         RTBvh {
             id: id as u32,
@@ -39,12 +59,13 @@ impl StructureManager {
     }
 
     pub fn store_mbvh(&self, mbvh: Mbvh) -> RTMbvh {
-        let mut lock = self.m_structures.lock().unwrap();
+        let mut lock = self.m_structures.write();
 
-        lock.push(mbvh);
+        lock.push(RwLock::new(mbvh));
         let id = lock.len() - 1;
 
-        let mbvh: &Mbvh = &lock[id];
+        let mbvh = lock[id].read();
+        let mbvh: &Mbvh = &mbvh;
 
         RTMbvh {
             id: id as u32,
@@ -57,10 +78,13 @@ impl StructureManager {
 
     pub fn get<T, B>(&self, id: u32, mut cb: T) -> Option<B>
     where
-        T: FnMut(Option<&Bvh>) -> B,
+        T: FnMut(&Bvh) -> B,
     {
-        if let Ok(lock) = self.structures.lock() {
-            Some(cb(lock.get(id as usize)))
+        let lock = self.structures.read();
+        if let Some(bvh) = lock.get(id as usize) {
+            let bvh = bvh.read();
+            let bvh: &Bvh = &bvh;
+            Some(cb(bvh))
         } else {
             None
         }
@@ -68,19 +92,22 @@ impl StructureManager {
 
     pub fn get_mut<T, B>(&self, id: u32, mut cb: T) -> Option<B>
     where
-        T: FnMut(Option<&mut Bvh>) -> B,
+        T: FnMut(&mut Bvh) -> B,
     {
-        if let Ok(mut lock) = self.structures.lock() {
-            Some(cb(lock.get_mut(id as usize)))
+        let lock = self.structures.read();
+        if let Some(bvh) = lock.get(id as usize) {
+            let mut bvh = bvh.write();
+            let bvh: &mut Bvh = &mut bvh;
+            Some(cb(bvh))
         } else {
             None
         }
     }
 
     pub fn free(&self, id: u32) -> Result<(), ()> {
-        let mut lock = self.structures.lock().unwrap();
-        if lock.get(id as usize).is_some() {
-            lock[id as usize] = Bvh::default();
+        let mut lock = self.structures.write();
+        if let Some(m) = lock.get_mut(id as usize) {
+            *m.get_mut() = Bvh::default();
             Ok(())
         } else {
             Err(())
@@ -88,9 +115,9 @@ impl StructureManager {
     }
 
     pub fn free_mbvh(&self, id: u32) -> Result<(), ()> {
-        let mut lock = self.m_structures.lock().unwrap();
-        if lock.get(id as usize).is_some() {
-            lock[id as usize] = Mbvh::default();
+        let mut lock = self.m_structures.write();
+        if let Some(m) = lock.get_mut(id as usize) {
+            *m.get_mut() = Mbvh::default();
             Ok(())
         } else {
             Err(())
@@ -191,6 +218,18 @@ pub struct RTBvh {
     indices: *const u32,
 }
 
+impl Default for RTBvh {
+    fn default() -> Self {
+        Self {
+            id: u32::MAX,
+            node_count: 0,
+            nodes: std::ptr::null(),
+            index_count: 0,
+            indices: std::ptr::null(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct RTMbvh {
@@ -201,6 +240,18 @@ pub struct RTMbvh {
 
     index_count: u32,
     indices: *const u32,
+}
+
+impl Default for RTMbvh {
+    fn default() -> Self {
+        Self {
+            id: u32::MAX,
+            node_count: 0,
+            nodes: std::ptr::null(),
+            index_count: 0,
+            indices: std::ptr::null(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -283,8 +334,14 @@ impl SpatialTriangle for RTTriangleWrapper {
     }
 }
 
+/// Creates a new spatial bvh from triangles.
+/// If aabbs is null, aabbs will be computed from the input triangles.
+///
+/// # Safety
+///
+/// This function is unsafe as it dereferences pointers.
 #[no_mangle]
-pub extern "C" fn create_spatial_Bvh(
+pub unsafe extern "C" fn create_spatial_Bvh(
     aabbs: *const RTAabb,
     prim_count: usize,
     centers: *const f32,
@@ -293,10 +350,16 @@ pub extern "C" fn create_spatial_Bvh(
     vertex_stride: usize,
     triangle_stride: usize,
     prims_per_leaf: u32,
-) -> RTBvh {
+    result: *mut RTBvh,
+) -> ResultCode {
     assert_eq!(stride % 4, 0);
 
-    let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const Aabb, prim_count) };
+    let aabbs = if !aabbs.is_null() {
+        Some(std::slice::from_raw_parts(aabbs as *const Aabb, prim_count))
+    } else {
+        None
+    };
+
     let primitives: Vec<RTTriangleWrapper> = (0..prim_count)
         .into_iter()
         .map(|i| RTTriangleWrapper {
@@ -308,14 +371,20 @@ pub extern "C" fn create_spatial_Bvh(
             vertex_stride: (vertex_stride / 4) as u32,
         })
         .collect();
-    let builder = Builder {
+
+    match (Builder {
         aabbs,
         primitives: primitives.as_slice(),
-        primitives_per_leaf: prims_per_leaf as usize,
-    };
-    let bvh = builder.construct_spatial_sah();
-
-    MANAGER.store(bvh)
+        primitives_per_leaf: NonZeroUsize::new(prims_per_leaf as usize),
+    })
+    .construct_spatial_sah()
+    {
+        Ok(bvh) => {
+            *result = MANAGER.store(bvh);
+            ResultCode::Ok
+        }
+        Err(e) => e.into(),
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -351,15 +420,23 @@ impl Primitive for Vector4 {
     }
 }
 
+/// # Safety
+///
+/// This function is unsafe as it dereferences pointers.
 #[no_mangle]
-pub extern "C" fn create_bvh(
+pub unsafe extern "C" fn create_bvh(
     aabbs: *const RTAabb,
     prim_count: usize,
     centers: *const f32,
     center_stride: usize,
     prims_per_leaf: usize,
     bvh_type: BvhType,
-) -> RTBvh {
+    result: *mut RTBvh,
+) -> ResultCode {
+    if centers.is_null() || result.is_null() {
+        return ResultCode::Error;
+    }
+
     assert_eq!(center_stride % 4, 0);
     assert!(
         center_stride >= 12,
@@ -370,67 +447,92 @@ pub extern "C" fn create_bvh(
         "Only centers of 12 <= stride <= 16 should be used."
     );
 
-    let aabbs = unsafe { std::slice::from_raw_parts(aabbs as *const Aabb, prim_count) };
-    let bvh = unsafe {
-        match center_stride {
-            12 => {
-                let primitives = std::slice::from_raw_parts(centers as *const Vector3, prim_count);
-                let builder = rtbvh::Builder {
-                    aabbs,
-                    primitives,
-                    primitives_per_leaf: prims_per_leaf as usize,
-                };
-                match bvh_type {
-                    BvhType::LocallyOrderedClustered => {
-                        builder.construct_locally_ordered_clustered()
-                    }
-                    BvhType::BinnedSAH => builder.construct_binned_sah(),
-                }
-            }
-            16 => {
-                let primitives = std::slice::from_raw_parts(centers as *const Vector4, prim_count);
-                let builder = rtbvh::Builder {
-                    aabbs,
-                    primitives,
-                    primitives_per_leaf: prims_per_leaf as usize,
-                };
-
-                match bvh_type {
-                    BvhType::LocallyOrderedClustered => {
-                        builder.construct_locally_ordered_clustered()
-                    }
-                    BvhType::BinnedSAH => builder.construct_binned_sah(),
-                }
-            }
-            _ => panic!("Invalid stride, only centers of 12 <= stride <= 16 should be used."),
-        }
+    let aabbs = if !aabbs.is_null() {
+        Some(std::slice::from_raw_parts(aabbs as *const Aabb, prim_count))
+    } else {
+        None
     };
 
-    MANAGER.store(bvh)
+    let bvh = match center_stride {
+        12 => {
+            let primitives = std::slice::from_raw_parts(centers as *const Vector3, prim_count);
+            let builder = rtbvh::Builder {
+                aabbs,
+                primitives,
+                primitives_per_leaf: NonZeroUsize::new(prims_per_leaf as usize),
+            };
+            match bvh_type {
+                BvhType::LocallyOrderedClustered => builder.construct_locally_ordered_clustered(),
+                BvhType::BinnedSAH => builder.construct_binned_sah(),
+            }
+        }
+        16 => {
+            let primitives = std::slice::from_raw_parts(centers as *const Vector4, prim_count);
+            let builder = rtbvh::Builder {
+                aabbs,
+                primitives,
+                primitives_per_leaf: NonZeroUsize::new(prims_per_leaf as usize),
+            };
+
+            match bvh_type {
+                BvhType::LocallyOrderedClustered => builder.construct_locally_ordered_clustered(),
+                BvhType::BinnedSAH => builder.construct_binned_sah(),
+            }
+        }
+        _ => panic!("Invalid stride, only centers of 12 <= stride <= 16 should be used."),
+    };
+
+    match bvh {
+        Ok(bvh) => {
+            *result = MANAGER.store(bvh);
+            ResultCode::Ok
+        }
+        Err(e) => e.into(),
+    }
 }
 
+/// # Safety
+///
+/// This function is unsafe as it dereferences pointers.
 #[no_mangle]
-pub extern "C" fn create_mbvh(bvh: RTBvh) -> RTMbvh {
-    MANAGER
-        .get(bvh.id, |bvh| {
-            let mbvh = Mbvh::construct(bvh.unwrap());
-            MANAGER.store_mbvh(mbvh)
+pub unsafe extern "C" fn create_mbvh(bvh: RTBvh, mbvh: *mut RTMbvh) -> ResultCode {
+    if mbvh.is_null() || bvh.nodes.is_null() || bvh.indices.is_null() {
+        return ResultCode::Error;
+    }
+
+    if let Some(m) = MANAGER.get(bvh.id, |bvh| {
+        let mbvh = Mbvh::construct(bvh);
+        MANAGER.store_mbvh(mbvh)
+    }) {
+        *mbvh = m;
+        ResultCode::Ok
+    } else {
+        ResultCode::Error
+    }
+}
+
+/// # Safety
+///
+/// This function is unsafe as it dereferences pointers.
+#[no_mangle]
+pub unsafe extern "C" fn refit(aabbs: *const RTAabb, bvh: RTBvh) -> ResultCode {
+    if aabbs.is_null() || bvh.nodes.is_null() || bvh.indices.is_null() {
+        return ResultCode::Error;
+    }
+
+    let refitted = MANAGER
+        .get_mut(bvh.id, |bvh| {
+            bvh.refit(std::slice::from_raw_parts(
+                aabbs as *const Aabb,
+                bvh.prim_count(),
+            ));
         })
-        .unwrap()
-}
+        .is_some();
 
-#[no_mangle]
-pub extern "C" fn refit(aabbs: *const RTAabb, bvh: RTBvh) {
-    unsafe {
-        MANAGER
-            .get_mut(bvh.id, |bvh| {
-                let bvh = bvh.unwrap();
-                bvh.refit(std::slice::from_raw_parts(
-                    aabbs as *const Aabb,
-                    bvh.prim_count(),
-                ));
-            })
-            .unwrap();
+    if refitted {
+        ResultCode::Ok
+    } else {
+        ResultCode::Error
     }
 }
 
@@ -486,17 +588,57 @@ mod tests {
             .collect();
 
         let centers: Vec<Vec3> = aabbs.iter().map(|bb| bb.center()).collect();
+        let mut bvh = RTBvh::default();
 
-        let bvh = create_bvh(
-            aabbs.as_ptr() as *const RTAabb,
-            27,
-            centers.as_ptr() as *const f32,
-            16,
-            1,
-            crate::BvhType::BinnedSAH,
+        assert_eq!(
+            unsafe {
+                create_bvh(
+                    std::ptr::null(),
+                    27,
+                    std::ptr::null(),
+                    16,
+                    1,
+                    crate::BvhType::BinnedSAH,
+                    &mut bvh,
+                )
+            },
+            ResultCode::Error
         );
 
-        let mbvh = create_mbvh(bvh);
+        assert_eq!(
+            unsafe {
+                create_bvh(
+                    std::ptr::null(),
+                    27,
+                    centers.as_ptr() as *const f32,
+                    16,
+                    1,
+                    crate::BvhType::BinnedSAH,
+                    &mut bvh,
+                )
+            },
+            ResultCode::Ok
+        );
+
+        free_bvh(bvh);
+
+        assert_eq!(
+            unsafe {
+                create_bvh(
+                    aabbs.as_ptr() as *const RTAabb,
+                    27,
+                    centers.as_ptr() as *const f32,
+                    16,
+                    1,
+                    crate::BvhType::BinnedSAH,
+                    &mut bvh,
+                )
+            },
+            ResultCode::Ok
+        );
+
+        let mut mbvh = RTMbvh::default();
+        assert_eq!(unsafe { create_mbvh(bvh, &mut mbvh) }, ResultCode::Ok);
 
         free_bvh(bvh);
         free_mbvh(mbvh);

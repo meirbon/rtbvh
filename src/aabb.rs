@@ -1,15 +1,17 @@
+use crate::{Ray, RayPacket4};
 use glam::*;
-use serde::{Deserialize, Serialize};
 use std::{default::Default, fmt::Debug};
 use std::{
     fmt::{Display, Formatter},
     ops::Index,
 };
 
-use crate::{Ray, RayPacket4};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(align(32))]
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone)]
 pub struct Aabb<Extra: Debug + Copy = i32> {
     pub min: Vec3,
     pub extra1: Extra,

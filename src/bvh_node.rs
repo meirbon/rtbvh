@@ -1,10 +1,13 @@
 use glam::*;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
 use crate::{Aabb, Ray, RayPacket4};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct BvhNode {
     pub bounds: Aabb<i32>,
@@ -24,6 +27,7 @@ impl Display for BvhNode {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NewNodeInfo {
     pub left: usize,
     pub left_box: Aabb,
@@ -34,6 +38,7 @@ pub struct NewNodeInfo {
     pub right_left_first: i32,
 }
 
+#[derive(Debug, Clone)]
 pub struct NodeUpdatePayLoad {
     pub index: usize,
     pub bounds: Aabb,
