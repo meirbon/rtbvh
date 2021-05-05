@@ -1,104 +1,107 @@
 use glam::*;
 use l3d::prelude::*;
 use rayon::prelude::*;
-use rtbvh::{spatial_sah::SpatialTriangle, Primitive};
-use std::num::NonZeroUsize;
+use rtbvh::*;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
-#[repr(align(64))]
-#[derive(Debug, Copy, Clone)]
-struct Triangle {
-    vertex0: Vec4,
-    vertex1: Vec4,
-    vertex2: Vec4,
-    id: usize,
-}
+use shared::*;
+use std::num::NonZeroUsize;
 
 const PRIMS_PER_LEAF: Option<NonZeroUsize> = NonZeroUsize::new(1);
-const RAYS: usize = 10_000_000;
+const WIDTH: usize = 1000;
+const HEIGHT: usize = 1000;
+const FRAMES: usize = 100;
+const RAYS: usize = FRAMES * WIDTH * HEIGHT;
 
-impl bvh::aabb::Bounded for Triangle {
-    fn aabb(&self) -> bvh::aabb::AABB {
-        bvh::aabb::AABB::empty()
-            .grow(&(*self.vertex0.xyz().as_ref()).into())
-            .grow(&(*self.vertex1.xyz().as_ref()).into())
-            .grow(&(*self.vertex2.xyz().as_ref()).into())
-    }
-}
+fn intersect_rays<'a, 'b, B: IntoRayIterator<'a, 'b, Triangle> + Sync>(
+    bvh: &'a B,
+    triangles: &'a [Triangle],
+    parallel: bool,
+    mut rays: Vec<Ray>,
+) -> f32 {
+    let rays = unsafe { std::mem::transmute::<&mut [Ray], &'b mut [Ray]>(rays.as_mut_slice()) };
 
-impl bvh::bounding_hierarchy::BHShape for Triangle {
-    fn set_bh_node_index(&mut self, id: usize) {
-        self.id = id;
-    }
-
-    fn bh_node_index(&self) -> usize {
-        self.id
-    }
-}
-
-impl rtbvh::Primitive for Triangle {
-    fn center(&self) -> Vec3 {
-        (self.vertex0.xyz() + self.vertex1.xyz() + self.vertex2.xyz()) * (1.0 / 3.0)
-    }
-
-    fn aabb(&self) -> rtbvh::Aabb {
-        let mut aabb = rtbvh::Aabb::empty();
-        aabb.grow(self.vertex0.xyz());
-        aabb.grow(self.vertex1.xyz());
-        aabb.grow(self.vertex2.xyz());
-        aabb
-    }
-}
-
-impl SpatialTriangle for Triangle {
-    fn vertex0(&self) -> Vec3 {
-        self.vertex0.xyz()
-    }
-
-    fn vertex1(&self) -> Vec3 {
-        self.vertex1.xyz()
-    }
-
-    fn vertex2(&self) -> Vec3 {
-        self.vertex2.xyz()
-    }
-}
-
-pub struct Timer {
-    moment: Instant,
-}
-
-impl Timer {
-    pub fn new() -> Timer {
-        Timer {
-            moment: Instant::now(),
+    let timer = Timer::default();
+    let elapsed = if parallel {
+        rays.par_chunks_mut(WIDTH).for_each(|chunk| {
+            for ray in chunk {
+                for (triangle, ray) in bvh.iter(ray, triangles) {
+                    let _result = triangle.intersect(ray);
+                }
+            }
+        });
+        timer.elapsed_in_millis()
+    } else {
+        for ray in rays.iter_mut() {
+            for (triangle, ray) in bvh.iter(ray, triangles) {
+                let _result = triangle.intersect(ray);
+            }
         }
-    }
+        timer.elapsed_in_millis()
+    };
 
-    pub fn reset(&mut self) {
-        self.moment = Instant::now();
-    }
-
-    pub fn elapsed(&self) -> Duration {
-        self.moment.elapsed()
-    }
-
-    pub fn elapsed_in_millis(&self) -> f32 {
-        let elapsed = self.elapsed();
-        let secs = elapsed.as_secs() as u32;
-        let millis = elapsed.subsec_micros();
-        (secs * 1_000) as f32 + (millis as f32 / 1000.0)
-    }
+    elapsed
 }
 
-impl Default for Timer {
-    fn default() -> Self {
-        Self::new()
-    }
+fn intersect_packets<'a, 'b, B: IntoPacketIterator<'a, 'b, Triangle> + Sync>(
+    bvh: &'a B,
+    triangles: &'a [Triangle],
+    parallel: bool,
+    mut rays: Vec<RayPacket4>,
+) -> f32 {
+    let rays = unsafe {
+        std::mem::transmute::<&mut [RayPacket4], &'b mut [RayPacket4]>(rays.as_mut_slice())
+    };
+
+    let timer = Timer::default();
+    let elapsed = if parallel {
+        rays.par_chunks_mut(WIDTH).for_each(|chunk| {
+            for ray in chunk {
+                for (triangle, ray) in bvh.iter(ray, triangles) {
+                    let _result = triangle.intersect4(ray, Vec4::splat(1e-4));
+                }
+            }
+        });
+        timer.elapsed_in_millis()
+    } else {
+        for ray in rays.iter_mut() {
+            for (triangle, ray) in bvh.iter(ray, triangles) {
+                let _result = triangle.intersect4(ray, Vec4::splat(1e-4));
+            }
+        }
+        timer.elapsed_in_millis()
+    };
+
+    elapsed
 }
 
 fn main() {
+    let fov = 90_f32.to_radians();
+    let screen_size = (fov * 0.5 / (180.0 / std::f32::consts::PI)).tan();
+    let up = Vec3::Y;
+    let right = Vec3::Z.cross(up);
+    let pos = vec3(0.0, 1.5, -100.0);
+    let center = pos + Vec3::Z;
+
+    let aspect_ratio = WIDTH as f32 / HEIGHT as f32;
+    let p1 = center - screen_size * right * aspect_ratio + screen_size * up;
+    let p2 = center + screen_size * right * aspect_ratio + screen_size * up;
+    let p3 = center - screen_size * right * aspect_ratio - screen_size * up;
+
+    let right = p2 - p1;
+    let up = p3 - p1;
+    let camera = CameraView3D {
+        pos,
+        right,
+        up,
+        p1,
+        direction: Vec3::Z,
+        inv_width: 1.0 / WIDTH as f32,
+        inv_height: 1.0 / HEIGHT as f32,
+        aspect_ratio,
+        fov,
+    };
+
     let loader = l3d::LoadInstance::new().with_default();
     let result = loader.load(LoadOptions {
         path: PathBuf::from("objects/teapot.obj"),
@@ -114,22 +117,30 @@ fn main() {
     let mut primitives = mesh
         .vertices
         .chunks_exact(3)
-        .enumerate()
-        .map(|(id, c)| Triangle {
-            vertex0: Vec4::from(c[0]),
-            vertex1: Vec4::from(c[1]),
-            vertex2: Vec4::from(c[2]),
-            id,
-        })
-        .collect::<Vec<Triangle>>();
+        .map(|c| Triangle::new(Vec4::from(c[0]), Vec4::from(c[1]), Vec4::from(c[2])))
+        .collect::<Vec<_>>();
     let aabbs = primitives
         .iter()
         .map(|t| t.aabb())
         .collect::<Vec<rtbvh::Aabb>>();
 
-    // Put ray in middle of teapot
-    let origin = Vec3::new(0.0, 1.5, 0.0);
-    let direction = Vec3::Z;
+    let mut rays = Vec::with_capacity(WIDTH * HEIGHT * FRAMES);
+    let mut packets = Vec::with_capacity(FRAMES * WIDTH * HEIGHT / 4);
+    for _ in 0..FRAMES {
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                rays.push(camera.generate_ray(x as u32, y as u32));
+            }
+        }
+
+        for y in 0..HEIGHT {
+            for x in (0..WIDTH).step_by(4) {
+                let x = x as u32;
+                let y = y as u32;
+                packets.push(camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4], [0; 4]));
+            }
+        }
+    }
 
     let timer = Timer::default();
     let bvh = rtbvh::Builder {
@@ -146,14 +157,7 @@ fn main() {
         timer.elapsed_in_millis()
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&bvh, &primitives, false, rays.clone());
     println!(
         "Single-threaded rays: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -161,14 +165,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_par_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&bvh, &primitives, true, rays.clone());
     println!(
         "{} threads rays: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -177,34 +174,8 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let origin_x = Vec4::from([0.0; 4]);
-    let origin_y = Vec4::from([1.5; 4]);
-    let origin_z = Vec4::from([0.0; 4]);
-    let direction_x = Vec4::from([0.0; 4]);
-    let direction_y = Vec4::from([0.0; 4]);
-    let direction_z = Vec4::from([1.0; 4]);
+    let elapsed = intersect_packets(&bvh, &primitives, false, packets.clone());
 
-    let timer = Timer::new();
-    (0..(RAYS / 3)).into_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: UVec4::ZERO,
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
     println!(
         "Single-threaded packets: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -212,27 +183,8 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: [0; 4].into(),
-            t: [1e34; 4].into(),
-        };
+    let elapsed = intersect_packets(&bvh, &primitives, true, packets.clone());
 
-        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
     println!(
         "{} threads packets: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -246,14 +198,7 @@ fn main() {
     let mbvh = rtbvh::Mbvh::from(bvh);
     println!("Mbvh construction took {} ms", timer.elapsed_in_millis());
 
-    let timer = Timer::new();
-    (0..RAYS).into_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&mbvh, &primitives, false, rays.clone());
     println!(
         "Single-threaded rays: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -261,15 +206,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_par_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&mbvh, &primitives, true, rays.clone());
     println!(
         "{} threads rays: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -278,27 +215,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: UVec4::ZERO,
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&mbvh, &primitives, false, packets.clone());
     println!(
         "Single-threaded packets: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -306,27 +223,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: [0; 4].into(),
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&mbvh, &primitives, true, packets.clone());
     println!(
         "{} threads packets: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -346,19 +243,12 @@ fn main() {
     .construct_binned_sah().unwrap();
 
     println!(
-        "Bvh construction with spatial sah type of {} primitives took {} ms",
+        "Bvh construction with binned sah type of {} primitives took {} ms",
         primitives.len(),
         timer.elapsed_in_millis()
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&bvh, &primitives, false, rays.clone());
     println!(
         "Single-threaded rays: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -366,14 +256,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_par_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in bvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&bvh, &primitives, true, rays.clone());
     println!(
         "{} threads rays: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -382,34 +265,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let origin_x = Vec4::from([0.0; 4]);
-    let origin_y = Vec4::from([1.5; 4]);
-    let origin_z = Vec4::from([0.0; 4]);
-    let direction_x = Vec4::from([0.0; 4]);
-    let direction_y = Vec4::from([0.0; 4]);
-    let direction_z = Vec4::from([1.0; 4]);
-
-    let timer = Timer::new();
-    (0..(RAYS / 3)).into_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: UVec4::ZERO,
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&bvh, &primitives, false, packets.clone());
     println!(
         "Single-threaded packets: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -417,27 +273,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: [0; 4].into(),
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in bvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&bvh, &primitives, true, packets.clone());
     println!(
         "{} threads packets: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -446,20 +282,12 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    // =========== binned sah
     println!();
     let timer = Timer::default();
     let mbvh = rtbvh::Mbvh::from(bvh);
     println!("Mbvh construction took {} ms", timer.elapsed_in_millis());
 
-    let timer = Timer::new();
-    (0..RAYS).into_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
-            let _result = triangle.intersect(ray);
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&mbvh, &primitives, false, rays.clone());
     println!(
         "Single-threaded rays: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -467,15 +295,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..RAYS).into_par_iter().for_each(|_| {
-        let mut ray = rtbvh::Ray::new(origin, direction);
-        for (triangle, ray) in mbvh.traverse_iter(&mut ray, &primitives) {
-            triangle.intersect(ray);
-        }
-    });
-
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_rays(&mbvh, &primitives, true, rays.clone());
     println!(
         "{} threads rays: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -484,27 +304,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: UVec4::ZERO,
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&mbvh, &primitives, false, packets.clone());
     println!(
         "Single-threaded packets: {} rays in {} ms, {} million rays per second",
         RAYS,
@@ -512,27 +312,7 @@ fn main() {
         RAYS as f32 / 1000.0 / elapsed
     );
 
-    let timer = Timer::new();
-    (0..(RAYS / 4)).into_par_iter().for_each(|_| {
-        let mut packet = rtbvh::RayPacket4 {
-            origin_x,
-            origin_y,
-            origin_z,
-            direction_x,
-            direction_y,
-            direction_z,
-            inv_direction_x: Vec4::ONE / direction_x,
-            inv_direction_y: Vec4::ONE / direction_y,
-            inv_direction_z: Vec4::ONE / direction_z,
-            pixel_ids: [0; 4].into(),
-            t: [1e34; 4].into(),
-        };
-
-        for (triangle, packet) in mbvh.traverse_iter_packet(&mut packet, &primitives) {
-            triangle.intersect4(packet, Vec4::splat(1e-4));
-        }
-    });
-    let elapsed = timer.elapsed_in_millis();
+    let elapsed = intersect_packets(&mbvh, &primitives, true, packets);
     println!(
         "{} threads packets: {} rays in {} ms, {} million rays per second",
         rayon::current_num_threads(),
@@ -540,6 +320,7 @@ fn main() {
         elapsed,
         RAYS as f32 / 1000.0 / elapsed
     );
+    println!();
 
     // 0.5.0 bvh crate
     println!();
@@ -551,46 +332,21 @@ fn main() {
         timer.elapsed_in_millis()
     );
 
-    let ray = bvh::ray::Ray::new((*origin.as_ref()).into(), (*direction.as_ref()).into());
-
     let timer = Timer::new();
-    (0..RAYS).into_iter().for_each(|_| {
-        let t_min = 1e-4;
-        let mut t_max = 1e34;
-        let origin = vec3(ray.origin.x, ray.origin.y, ray.origin.z);
-        let direction = vec3(ray.direction.x, ray.direction.y, ray.direction.z);
-        for triangle in bvh.traverse_iterator(&ray, &primitives) {
-            let v0 = triangle.vertex0();
-            let v1 = triangle.vertex1();
-            let v2 = triangle.vertex2();
-
-            let edge1 = v1 - v0;
-            let edge2 = v2 - v0;
-            let h_val = direction.cross(edge2);
-            let a_val = edge1.dot(h_val);
-            if a_val > -1e-5 && a_val < 1e-5 {
-                continue;
-            }
-            let f_val = 1.0 / a_val;
-            let s_val = origin - v0.xyz();
-            let u_val = f_val * s_val.dot(h_val);
-            if !(0.0..=1.0).contains(&u_val) {
-                continue;
-            }
-            let q_val = s_val.cross(edge1);
-            let v_val = f_val * direction.dot(q_val);
-            if v_val < 0. || (u_val + v_val) > 1.0 {
-                continue;
-            }
-
-            let t: f32 = f_val * edge2.dot(q_val);
-            if t > t_min && t < t_max {
-                t_max = t;
+    rays.chunks_mut(WIDTH).for_each(|chunk| {
+        for ray in chunk {
+            let r = bvh::ray::Ray::new(
+                (*ray.origin.as_ref()).into(),
+                (*ray.direction.as_ref()).into(),
+            );
+    
+            for triangle in bvh.traverse_iterator(&r, &primitives) {
+                let _result = triangle.intersect(ray);
             }
         }
     });
-
     let elapsed = timer.elapsed_in_millis();
+    rays.iter_mut().for_each(|r| r.reset());
     println!(
         "Single-threaded rays: {} rays  in {} ms, {} million rays per second",
         RAYS,
@@ -599,42 +355,18 @@ fn main() {
     );
 
     let timer = Timer::new();
-    (0..RAYS).into_par_iter().for_each(|_| {
-        let t_min = 1e-4;
-        let mut t_max = 1e34;
-        let origin = vec3(ray.origin.x, ray.origin.y, ray.origin.z);
-        let direction = vec3(ray.direction.x, ray.direction.y, ray.direction.z);
-        for triangle in bvh.traverse_iterator(&ray, &primitives) {
-            let v0 = triangle.vertex0();
-            let v1 = triangle.vertex1();
-            let v2 = triangle.vertex2();
+    rays.par_chunks_mut(WIDTH).for_each(|chunk| {
+        for ray in chunk {
+            let r = bvh::ray::Ray::new(
+                (*ray.origin.as_ref()).into(),
+                (*ray.direction.as_ref()).into(),
+            );
 
-            let edge1 = v1 - v0;
-            let edge2 = v2 - v0;
-            let h_val = direction.cross(edge2);
-            let a_val = edge1.dot(h_val);
-            if a_val > -1e-5 && a_val < 1e-5 {
-                continue;
-            }
-            let f_val = 1.0 / a_val;
-            let s_val = origin - v0.xyz();
-            let u_val = f_val * s_val.dot(h_val);
-            if !(0.0..=1.0).contains(&u_val) {
-                continue;
-            }
-            let q_val = s_val.cross(edge1);
-            let v_val = f_val * direction.dot(q_val);
-            if v_val < 0. || (u_val + v_val) > 1.0 {
-                continue;
-            }
-
-            let t: f32 = f_val * edge2.dot(q_val);
-            if t > t_min && t < t_max {
-                t_max = t;
+            for triangle in bvh.traverse_iterator(&r, &primitives) {
+                let _result = triangle.intersect(ray);
             }
         }
     });
-
     let elapsed = timer.elapsed_in_millis();
     println!(
         "{} threads rays: {} rays in {} ms, {} million rays per second",

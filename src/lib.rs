@@ -19,25 +19,28 @@ pub use ray::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{spatial_sah::SpatialTriangle, Aabb, Builder, Primitive, BuildError};
+    use crate::*;
 
     #[test]
     fn test_invalid_input() {
         let builder: Builder<Triangle> = Builder {
             aabbs: None,
             primitives: &[],
-            primitives_per_leaf: None
+            primitives_per_leaf: None,
         };
-        assert_eq!(builder.construct_binned_sah().unwrap_err(), BuildError::NoPrimitives);
+        assert_eq!(
+            builder.construct_binned_sah().unwrap_err(),
+            BuildError::NoPrimitives
+        );
 
         let builder: Builder<Triangle> = Builder {
             aabbs: None,
             primitives: &[Triangle {
                 vertex0: Default::default(),
                 vertex1: Default::default(),
-                vertex2: Default::default()
+                vertex2: Default::default(),
             }],
-            primitives_per_leaf: None
+            primitives_per_leaf: None,
         };
         assert!(builder.construct_binned_sah().is_ok());
 
@@ -46,11 +49,14 @@ mod tests {
             primitives: &[Triangle {
                 vertex0: Default::default(),
                 vertex1: Default::default(),
-                vertex2: Default::default()
+                vertex2: Default::default(),
             }],
-            primitives_per_leaf: None
+            primitives_per_leaf: None,
         };
-        assert_eq!(builder.construct_binned_sah().unwrap_err(), BuildError::InequalAabbsAndPrimitives(0, 1));
+        assert_eq!(
+            builder.construct_binned_sah().unwrap_err(),
+            BuildError::InequalAabbsAndPrimitives(0, 1)
+        );
     }
 
     #[test]

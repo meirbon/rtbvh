@@ -149,14 +149,22 @@ impl RayPacket4 {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn t(&self) -> Vec4 {
         self.t
+    }
+
+    #[inline(always)]
+    pub fn reset(&mut self) {
+        self.t = Vec4::splat(Ray::DEFAULT_T_MAX);
     }
 }
 
 #[allow(dead_code)]
 impl Ray {
+    pub const DEFAULT_T_MIN: f32 = 1e-4;
+    pub const DEFAULT_T_MAX: f32 = 1e34;
+
     pub fn new(origin: Vec3, direction: Vec3) -> Ray {
         let signs = [
             (direction.x < 0.0) as u8,
@@ -168,8 +176,8 @@ impl Ray {
         Ray {
             origin,
             direction,
-            t_min: 1e-4,
-            t: 1e34,
+            t_min: Self::DEFAULT_T_MIN,
+            t: Self::DEFAULT_T_MAX,
             inv_direction: Vec3::ONE / direction,
             signs,
         }
@@ -191,13 +199,18 @@ impl Ray {
             origin: hit_point + direction * epsilon,
             direction,
             inv_direction: Vec3::ONE / direction,
-            t_min: 1e-4,
-            t: 1e34,
+            t_min: Self::DEFAULT_T_MIN,
+            t: Self::DEFAULT_T_MAX,
             signs,
         }
     }
 
-    #[inline]
+    #[inline(always)]
+    pub fn is_valid(&self) -> bool {
+        self.t < 1e33
+    }
+
+    #[inline(always)]
     pub fn get_point_at(&self, t: f32) -> Vec3 {
         self.origin + t * self.direction
     }
@@ -215,5 +228,10 @@ impl Ray {
     #[inline(always)]
     pub(crate) fn sign_z(&self) -> usize {
         self.signs[2] as usize
+    }
+
+    #[inline(always)]
+    pub fn reset(&mut self) {
+        self.t = Self::DEFAULT_T_MAX;
     }
 }

@@ -331,9 +331,7 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm for LocallyOrderedClusteringBuilder<'
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spatial_sah::SpatialTriangle;
     use crate::tests::Triangle;
-    use crate::Bounds;
 
     #[test]
     fn no_primitives() {
@@ -370,21 +368,21 @@ mod tests {
                 "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex0())
+                t.vertex0()
             );
             assert!(
                 bounds.contains(t.vertex1()),
                 "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex1())
+                t.vertex1()
             );
             assert!(
                 bounds.contains(t.vertex2()),
                 "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex2())
+                t.vertex2()
             );
         }
     }

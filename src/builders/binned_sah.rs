@@ -344,7 +344,10 @@ impl<'a, T: Primitive<i32>> BinnedSahBuilder<'a, T> {
 
 impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
     fn build(self) -> Bvh {
-        if self.primitives.len() != self.aabbs.len() || self.primitives.is_empty() || self.aabbs.is_empty() {
+        if self.primitives.len() != self.aabbs.len()
+            || self.primitives.is_empty()
+            || self.aabbs.is_empty()
+        {
             return Bvh::default();
         }
 
@@ -372,7 +375,7 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
         {
             let mut stack = vec![root_task];
             while let Some(task) = stack.pop() {
-                if let Some(left_task, right_task) = task.run() {
+                if let Some(left, right) = task.run() {
                     stack.push(left);
                     stack.push(right);
                 }
@@ -393,10 +396,8 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::spatial_sah::SpatialTriangle;
-    use crate::Bounds;
     use crate::tests::Triangle;
+    use crate::*;
 
     #[test]
     fn no_primitives() {
@@ -432,21 +433,21 @@ mod tests {
                 "Bvh did not contain vertex 0 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex0())
+                t.vertex0()
             );
             assert!(
                 bounds.contains(t.vertex1()),
                 "Bvh did not contain vertex 1 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex1())
+                t.vertex1()
             );
             assert!(
                 bounds.contains(t.vertex2()),
                 "Bvh did not contain vertex 2 of primitive {}, bvh-bounds: {}, vertex: {}",
                 i,
                 bounds,
-                Vec3::from(t.vertex2())
+                t.vertex2()
             );
         }
     }

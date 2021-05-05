@@ -1,8 +1,26 @@
 use crate::*;
 
+pub trait RayIterator<'a, 'b, T: 'a + Primitive>: Iterator<Item = (&'a T, &'b mut Ray)> {}
+pub trait PacketIterator<'a, 'b, T: 'a + Primitive>:
+    Iterator<Item = (&'a T, &'b mut RayPacket4)>
+{
+}
+
+pub trait IntoRayIterator<'a, 'b, T: 'a + Primitive> {
+    type RIterator: RayIterator<'a, 'b, T>;
+
+    fn iter(&'a self, ray: &'b mut Ray, primitives: &'a [T]) -> Self::RIterator;
+}
+
+pub trait IntoPacketIterator<'a, 'b, T: 'a + Primitive> {
+    type RIterator: PacketIterator<'a, 'b, T>;
+
+    fn iter(&'a self, packet: &'b mut RayPacket4, primitives: &'a [T]) -> Self::RIterator;
+}
+
 #[derive(Debug)]
-pub struct BvhIterator<'a, T: Primitive> {
-    ray: &'a mut Ray,
+pub struct BvhIterator<'a, 'b, T: 'a + Primitive> {
+    ray: &'b mut Ray,
     i: i32,
     stack: [i32; 32],
     stack_ptr: i32,
@@ -10,8 +28,10 @@ pub struct BvhIterator<'a, T: Primitive> {
     primitives: &'a [T],
 }
 
-impl<'a, T: Primitive> BvhIterator<'a, T> {
-    pub fn new(ray: &'a mut Ray, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
+impl<'a, 'b, T: 'a + Primitive> RayIterator<'a, 'b, T> for BvhIterator<'a, 'b, T> {}
+
+impl<'a, 'b, T: 'a + Primitive> BvhIterator<'a, 'b, T> {
+    pub fn new(ray: &'b mut Ray, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
         let stack_ptr = if bvh.nodes.is_empty() || primitives.is_empty() {
             -1
         } else {
@@ -29,8 +49,8 @@ impl<'a, T: Primitive> BvhIterator<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> Iterator for BvhIterator<'a, T> {
-    type Item = (&'a T, &'a mut Ray);
+impl<'a, 'b, T: 'a + Primitive> Iterator for BvhIterator<'a, 'b, T> {
+    type Item = (&'a T, &'b mut Ray);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -60,7 +80,7 @@ impl<'a, T: Primitive> Iterator for BvhIterator<'a, T> {
                     self.stack_ptr += 1;
                     if let Some(prim) = self.primitives.get(prim_id as usize) {
                         return Some((prim, unsafe {
-                            std::mem::transmute::<&mut Ray, &'a mut Ray>(self.ray)
+                            std::mem::transmute::<&mut Ray, &'b mut Ray>(self.ray)
                         }));
                     }
                 }
@@ -81,8 +101,8 @@ impl<'a, T: Primitive> Iterator for BvhIterator<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct BvhPacketIterator<'a, T: Primitive> {
-    ray: &'a mut RayPacket4,
+pub struct BvhPacketIterator<'a, 'b, T: 'a + Primitive> {
+    ray: &'b mut RayPacket4,
     i: i32,
     stack: [i32; 32],
     stack_ptr: i32,
@@ -90,14 +110,15 @@ pub struct BvhPacketIterator<'a, T: Primitive> {
     primitives: &'a [T],
 }
 
-impl<'a, T: Primitive> BvhPacketIterator<'a, T> {
-    pub fn new(ray: &'a mut RayPacket4, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
+impl<'a, 'b, T: 'a + Primitive> PacketIterator<'a, 'b, T> for BvhPacketIterator<'a, 'b, T> {}
+
+impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
+    pub fn new(ray: &'b mut RayPacket4, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
         let stack_ptr = if bvh.nodes.is_empty() || primitives.is_empty() {
             -1
         } else {
             0
         };
-
         Self {
             ray,
             i: 0,
@@ -109,8 +130,8 @@ impl<'a, T: Primitive> BvhPacketIterator<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> Iterator for BvhPacketIterator<'a, T> {
-    type Item = (&'a T, &'a mut RayPacket4);
+impl<'a, 'b, T: 'a + Primitive> Iterator for BvhPacketIterator<'a, 'b, T> {
+    type Item = (&'a T, &'b mut RayPacket4);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -140,7 +161,7 @@ impl<'a, T: Primitive> Iterator for BvhPacketIterator<'a, T> {
                     self.stack_ptr += 1;
                     if let Some(prim) = self.primitives.get(prim_id as usize) {
                         return Some((prim, unsafe {
-                            std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(self.ray)
+                            std::mem::transmute::<&mut RayPacket4, &'b mut RayPacket4>(self.ray)
                         }));
                     }
                 }
@@ -161,8 +182,8 @@ impl<'a, T: Primitive> Iterator for BvhPacketIterator<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct MbvhIterator<'a, T: Primitive> {
-    ray: &'a mut Ray,
+pub struct MbvhIterator<'a, 'b, T: 'a + Primitive> {
+    ray: &'b mut Ray,
     hit: MbvhHit,
     current: i32,
     i: i32,
@@ -174,8 +195,10 @@ pub struct MbvhIterator<'a, T: Primitive> {
     primitives: &'a [T],
 }
 
-impl<'a, T: Primitive> MbvhIterator<'a, T> {
-    pub fn new(ray: &'a mut Ray, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
+impl<'a, 'b, T: 'a + Primitive> RayIterator<'a, 'b, T> for MbvhIterator<'a, 'b, T> {}
+
+impl<'a, 'b, T: Primitive> MbvhIterator<'a, 'b, T> {
+    pub fn new(ray: &'b mut Ray, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
         let hit = bvh
             .m_nodes
             .get(0)
@@ -196,8 +219,8 @@ impl<'a, T: Primitive> MbvhIterator<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
-    type Item = (&'a T, &'a mut Ray);
+impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhIterator<'a, 'b, T> {
+    type Item = (&'a T, &'b mut Ray);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -230,7 +253,7 @@ impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
                             self.j += 1;
                             if let Some(prim) = self.primitives.get(prim_id as usize) {
                                 return Some((prim, unsafe {
-                                    std::mem::transmute::<&mut Ray, &'a mut Ray>(self.ray)
+                                    std::mem::transmute::<&mut Ray, &'b mut Ray>(self.ray)
                                 }));
                             }
                         }
@@ -249,8 +272,8 @@ impl<'a, T: Primitive> Iterator for MbvhIterator<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct MbvhPacketIterator<'a, T: Primitive> {
-    ray: &'a mut RayPacket4,
+pub struct MbvhPacketIterator<'a, 'b, T: 'a + Primitive> {
+    ray: &'b mut RayPacket4,
     hit: MbvhHit,
     current: i32,
     i: i32,
@@ -262,9 +285,15 @@ pub struct MbvhPacketIterator<'a, T: Primitive> {
     primitives: &'a [T],
 }
 
-impl<'a, T: Primitive> MbvhPacketIterator<'a, T> {
-    pub fn new(ray: &'a mut RayPacket4, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
-        let hit = bvh.m_nodes[0].intersect4(&ray);
+impl<'a, 'b, T: 'a + Primitive> PacketIterator<'a, 'b, T> for MbvhPacketIterator<'a, 'b, T> {}
+
+impl<'a, 'b, T: 'a + Primitive> MbvhPacketIterator<'a, 'b, T> {
+    pub fn new(ray: &'b mut RayPacket4, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
+        let hit = bvh
+            .m_nodes
+            .get(0)
+            .map(|n| n.intersect4(&ray))
+            .unwrap_or_default();
         Self {
             ray,
             hit,
@@ -280,8 +309,8 @@ impl<'a, T: Primitive> MbvhPacketIterator<'a, T> {
     }
 }
 
-impl<'a, T: Primitive> Iterator for MbvhPacketIterator<'a, T> {
-    type Item = (&'a T, &'a mut RayPacket4);
+impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhPacketIterator<'a, 'b, T> {
+    type Item = (&'a T, &'b mut RayPacket4);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -314,7 +343,7 @@ impl<'a, T: Primitive> Iterator for MbvhPacketIterator<'a, T> {
                             self.j += 1;
                             if let Some(prim) = self.primitives.get(prim_id as usize) {
                                 return Some((prim, unsafe {
-                                    std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(
+                                    std::mem::transmute::<&mut RayPacket4, &'b mut RayPacket4>(
                                         self.ray,
                                     )
                                 }));
