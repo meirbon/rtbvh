@@ -4,6 +4,9 @@ use rayon::prelude::*;
 use std::fmt::{Debug, Formatter};
 use std::num::NonZeroUsize;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub trait Primitive<AabbType: Debug + Copy + Send + Sync = i32>: Debug + Send + Sync {
     fn center(&self) -> Vec3;
 
