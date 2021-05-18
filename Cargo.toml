@@ -1,6 +1,6 @@
 [package]
 name = "rtbvh"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -11,7 +11,7 @@ keywords = ["ray", "tracing", "bvh", "sah", "fast"]
 
 [dependencies]
 crossbeam = "0.8"
-glam = { version = "0.14", features = ["serde"] }
+glam = { version = ">=0.14", features = ["serde"] }
 num_cpus = "1.13"
 rayon = "1.5"
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -24,8 +24,8 @@ default = []
 l3d = "0.1"
 rayon = "1.5"
 bvh = "0.5"
-winit = "0.24.0"
-pixels = "0.2.0"
+winit = "0.25.0"
+pixels = "0.3.0"
 shared = { path = "shared" }
 
 [profile.release]
