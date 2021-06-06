@@ -14,7 +14,7 @@ An MBVH implementation is included as well and all the BVH structures implement 
 This library emits a C/C++ library which is used in my [hobby renderer](https://github.com/meirbon/rendering-fw).
 
 ## Performance
-In a scene with a teapot of ~6300 triangles, an AMD 32-core 5950x achieves the following performance:
+In a scene with a teapot of ~6300 triangles, an AMD 16-core 5950x achieves the following performance:
 ```
 Bvh construction with spatial sah type of 6320 primitives took 25.171 ms
 Single-threaded rays: 100000000 rays in 22446.148 ms, 4.455107 million rays per second
