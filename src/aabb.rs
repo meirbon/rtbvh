@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[repr(align(32))]
+#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
 pub struct Aabb<Extra: Debug + Copy = i32> {
     pub min: Vec3,
