@@ -320,12 +320,16 @@ impl MbvhNode {
             }
 
             if mbvh_pool[m_index].counts[idx] < 0 {
-                // Not a leaf node
                 let cur_node = mbvh_pool[m_index].children[idx] as usize;
-                let new_idx = *pool_ptr;
-                *pool_ptr += 1;
-                mbvh_pool[m_index].children[idx] = new_idx as i32;
-                Self::merge_nodes(new_idx, cur_node, bvh_pool, mbvh_pool, pool_ptr);
+                if !bvh_pool[cur_node].is_leaf() {
+                    let new_idx = *pool_ptr;
+                    *pool_ptr += 1;
+                    mbvh_pool[m_index].children[idx] = new_idx as i32;
+                    Self::merge_nodes(new_idx, cur_node, bvh_pool, mbvh_pool, pool_ptr);
+                } else {
+                    mbvh_pool[m_index].counts[idx] = 0;
+                    mbvh_pool[m_index].children[idx] = 0;
+                }
             }
         }
     }
