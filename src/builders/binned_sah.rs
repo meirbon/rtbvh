@@ -386,6 +386,11 @@ impl<'a, T: Primitive<i32>> BuildAlgorithm for BinnedSahBuilder<'a, T> {
         #[cfg(not(feature = "wasm_support"))]
         task_spawner.run(root_task);
 
+        nodes.resize(
+            node_count.load(std::sync::atomic::Ordering::Relaxed),
+            Default::default(),
+        );
+
         Bvh {
             nodes,
             prim_indices,

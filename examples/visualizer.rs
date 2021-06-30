@@ -69,7 +69,7 @@ fn main() {
         primitives: primitives.as_slice(),
         primitives_per_leaf: NonZeroUsize::new(3),
     }
-    .construct_binned_sah()
+    .construct_spatial_sah()
     .unwrap();
 
     let mbvh = Mbvh::from(bvh.clone());

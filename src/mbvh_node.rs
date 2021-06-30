@@ -304,7 +304,13 @@ impl MbvhNode {
     ) {
         let cur_node = &bvh_pool[cur_node];
         if cur_node.is_leaf() {
-            panic!("Leaf nodes should not be attempted to be split!");
+            mbvh_pool[m_index].children[0] = cur_node.get_left_first_unchecked();
+            mbvh_pool[m_index].counts[0] = cur_node.get_count_unchecked();
+            for i in 1..4 {
+                mbvh_pool[m_index].children[i] = -1;
+                mbvh_pool[m_index].counts[i] = -1;
+            }
+            return;
         } else if m_index >= mbvh_pool.len() {
             panic!("Index {} is out of bounds!", m_index);
         }

@@ -19,6 +19,8 @@ pub use ray::*;
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use crate::*;
 
     #[test]
@@ -266,14 +268,40 @@ mod tests {
             },
         ];
 
-        let bvh = (Builder {
-            aabbs: None,
-            primitives: triangles.as_slice(),
-            primitives_per_leaf: None,
-        })
-        .construct_spatial_sah()
-        .unwrap_or_default();
+        for i in 1..=10 {
+            let bvh = (Builder {
+                aabbs: None,
+                primitives: triangles.as_slice(),
+                primitives_per_leaf: NonZeroUsize::new(i),
+            })
+            .construct_binned_sah()
+            .unwrap_or_default();
 
-        let _mbvh = Mbvh::from(bvh);
+            let _mbvh = Mbvh::from(bvh);
+        }
+
+        for i in 1..=10 {
+            let bvh = (Builder {
+                aabbs: None,
+                primitives: triangles.as_slice(),
+                primitives_per_leaf: NonZeroUsize::new(i),
+            })
+            .construct_spatial_sah()
+            .unwrap_or_default();
+
+            let _mbvh = Mbvh::from(bvh);
+        }
+
+        for i in 1..=10 {
+            let bvh = (Builder {
+                aabbs: None,
+                primitives: triangles.as_slice(),
+                primitives_per_leaf: NonZeroUsize::new(i),
+            })
+            .construct_locally_ordered_clustered()
+            .unwrap_or_default();
+
+            let _mbvh = Mbvh::from(bvh);
+        }
     }
 }

@@ -25,7 +25,7 @@ struct SpatialBin {
 #[derive(Debug, Copy, Clone)]
 struct ObjectSplit {
     pub cost: f32,
-    pub index: usize,
+    pub index: Option<isize>,
     pub axis: usize,
     pub left_box: Aabb<i32>,
     pub right_box: Aabb<i32>,
@@ -35,7 +35,7 @@ impl Default for ObjectSplit {
     fn default() -> Self {
         Self {
             cost: std::f32::MAX,
-            index: 1,
+            index: None,
             axis: 0,
             left_box: Aabb::empty(),
             right_box: Aabb::empty(),
@@ -351,7 +351,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
                     best_split = ObjectSplit {
                         cost,
                         axis,
-                        index: i + 1,
+                        index: Some(i as isize + 1),
                         left_box: aabb,
                         right_box: self.accumulated_aabbs[i + 1],
                     }
@@ -449,13 +449,29 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
     }
 
     fn apply_object_split(&mut self, split: ObjectSplit) -> (WorkItem, WorkItem) {
+        let split_index = split.index.unwrap() as usize;
+        assert!(
+            split_index >= self.work_item.begin,
+            "{}, {}, {}",
+            split_index,
+            self.work_item.begin,
+            self.work_item.end
+        );
+        assert!(
+            split_index < self.work_item.end,
+            "{}, {}, {}",
+            split_index,
+            self.work_item.begin,
+            self.work_item.end
+        );
+
         let other_axis = ((split.axis + 1) % 3, (split.axis + 2) % 3);
         let mut reference_marks = vec![false; self.prim_indices.len()];
 
-        for i in self.work_item.begin..split.index {
+        for i in self.work_item.begin..split_index {
             reference_marks[self.references[split.axis][i].prim_id as usize] = true;
         }
-        for i in split.index..self.work_item.end {
+        for i in split_index..self.work_item.end {
             reference_marks[self.references[split.axis][i].prim_id as usize] = false;
         }
 
@@ -475,7 +491,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
             .sort_by(partition_predicate);
 
         self.allocate_children(
-            split.index,
+            split_index,
             self.work_item.end,
             split.left_box,
             split.right_box,
@@ -756,17 +772,19 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> Task for SpatialSahBuildTask<'a, T
             // In case splitting results in worse node costs, use median split as fallback strategy
             if self.work_item.work_size() > self.builder.max_leaf_size {
                 use_spatial_split = false;
-                best_object_split.index = (self.work_item.begin + self.work_item.end) / 2;
+                best_object_split.index =
+                    Some((self.work_item.begin + self.work_item.end) as isize / 2);
                 best_object_split.axis = node.bounds.longest_axis();
                 best_object_split.left_box = Aabb::empty();
                 best_object_split.right_box = Aabb::empty();
 
-                for i in self.work_item.begin..best_object_split.index {
+                let best_split_index = best_object_split.index.unwrap() as usize;
+                for i in self.work_item.begin..best_split_index {
                     best_object_split
                         .left_box
                         .grow_bb(&self.references[best_object_split.axis][i].aabb);
                 }
-                for i in best_object_split.index..self.work_item.end {
+                for i in best_split_index..self.work_item.end {
                     best_object_split
                         .right_box
                         .grow_bb(&self.references[best_object_split.axis][i].aabb);
@@ -786,8 +804,12 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> Task for SpatialSahBuildTask<'a, T
 
         let (work_a, work_b) = if use_spatial_split {
             self.apply_spatial_split(best_spatial_split)
-        } else {
+        } else if best_object_split.index.is_some() {
             self.apply_object_split(best_object_split)
+        } else {
+            // No valid split found, make this node a leaf node
+            make_leaf(node, self.work_item.begin, self.work_item.end);
+            return None;
         };
 
         let task_a = Self::new(

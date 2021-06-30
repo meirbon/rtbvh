@@ -23,7 +23,14 @@ impl Default for BvhNode {
 
 impl Display for BvhNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.bounds)
+        write!(
+            f,
+            "BvhNode {{ min: {}, left_first: {}, max: {}, count: {} }}",
+            self.bounds.min,
+            self.get_left_first_unchecked(),
+            self.bounds.max,
+            self.get_count_unchecked()
+        )
     }
 }
 
