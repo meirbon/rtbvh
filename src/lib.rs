@@ -235,4 +235,45 @@ mod tests {
         let aabbs = primitives.iter().map(|t| t.aabb()).collect::<Vec<Aabb>>();
         (aabbs, primitives)
     }
+
+    #[test]
+    fn five_triangle_test_case() {
+        let triangles = vec![
+            Triangle {
+                vertex0: Vec4::new(128.79, -1422.82, 0.16, 0.0),
+                vertex1: Vec4::new(128.5, -1426.88, 0.16, 0.0),
+                vertex2: Vec4::new(128.79, -1426.9067, 0.16, 0.0),
+            },
+            Triangle {
+                vertex0: Vec4::new(129.8, -1422.8629, 0.16, 0.0),
+                vertex1: Vec4::new(128.79, -1422.82, 0.16, 0.0),
+                vertex2: Vec4::new(128.79, -1426.9067, 0.16, 0.0),
+            },
+            Triangle {
+                vertex0: Vec4::new(129.8, -1422.8629, 0.16, 0.0),
+                vertex1: Vec4::new(128.79, -1426.9067, 0.16, 0.0),
+                vertex2: Vec4::new(129.8, -1427.0, 0.16, 0.0),
+            },
+            Triangle {
+                vertex0: Vec4::new(130.2, -1422.88, 0.16, 0.0),
+                vertex1: Vec4::new(129.8, -1422.8629, 0.16, 0.0),
+                vertex2: Vec4::new(129.8, -1427.0, 0.16, 0.0),
+            },
+            Triangle {
+                vertex0: Vec4::new(130.2, -1422.88, 0.16, 0.0),
+                vertex1: Vec4::new(129.8, -1427.0, 0.16, 0.0),
+                vertex2: Vec4::new(130.2, -1423.13, 0.16, 0.0),
+            },
+        ];
+
+        let bvh = (Builder {
+            aabbs: None,
+            primitives: triangles.as_slice(),
+            primitives_per_leaf: None,
+        })
+        .construct_spatial_sah()
+        .unwrap_or_default();
+
+        let _mbvh = Mbvh::from(bvh);
+    }
 }
