@@ -3,7 +3,7 @@ use glam::*;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use rtbvh::*;
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, slice};
 
 lazy_static! {
     static ref MANAGER: StructureManager = StructureManager::default();
@@ -21,6 +21,7 @@ pub enum ResultCode {
     Error = 1,
     NoPrimitives = 2,
     InequalAabbsAndPrimitives = 3,
+    Nan = 4,
 }
 
 impl From<BuildError> for ResultCode {
@@ -355,7 +356,7 @@ pub unsafe extern "C" fn create_spatial_Bvh(
     assert_eq!(stride % 4, 0);
 
     let aabbs = if !aabbs.is_null() {
-        Some(std::slice::from_raw_parts(aabbs as *const Aabb, prim_count))
+        Some(slice::from_raw_parts(aabbs as *const Aabb, prim_count))
     } else {
         None
     };
@@ -448,14 +449,14 @@ pub unsafe extern "C" fn create_bvh(
     );
 
     let aabbs = if !aabbs.is_null() {
-        Some(std::slice::from_raw_parts(aabbs as *const Aabb, prim_count))
+        Some(slice::from_raw_parts(aabbs as *const Aabb, prim_count))
     } else {
         None
     };
 
     let bvh = match center_stride {
         12 => {
-            let primitives = std::slice::from_raw_parts(centers as *const Vector3, prim_count);
+            let primitives = slice::from_raw_parts(centers as *const Vector3, prim_count);
             let builder = rtbvh::Builder {
                 aabbs,
                 primitives,
@@ -467,7 +468,7 @@ pub unsafe extern "C" fn create_bvh(
             }
         }
         16 => {
-            let primitives = std::slice::from_raw_parts(centers as *const Vector4, prim_count);
+            let primitives = slice::from_raw_parts(centers as *const Vector4, prim_count);
             let builder = rtbvh::Builder {
                 aabbs,
                 primitives,
@@ -522,7 +523,7 @@ pub unsafe extern "C" fn refit(aabbs: *const RTAabb, bvh: RTBvh) -> ResultCode {
 
     let refitted = MANAGER
         .get_mut(bvh.id, |bvh| {
-            bvh.refit(std::slice::from_raw_parts(
+            bvh.refit(slice::from_raw_parts(
                 aabbs as *const Aabb,
                 bvh.prim_count(),
             ));
@@ -534,6 +535,303 @@ pub unsafe extern "C" fn refit(aabbs: *const RTAabb, bvh: RTBvh) -> ResultCode {
     } else {
         ResultCode::Error
     }
+}
+
+/// # Safety
+///
+/// This function uses external function pointers which are unsafe.
+/// origin must be a pointer to a 3-component float array
+/// direction must be a pointer to a 3-component float array
+/// user_data may be null
+/// intersect must not be null and is called for every potential primitive.
+/// intersect takes the following arguments:
+///     (in primitive_id, inout t_value, user_data)
+/// if intersect returns true, the intersection loop will early out
+#[no_mangle]
+pub unsafe extern "C" fn intersect(
+    bvh: RTBvh,
+    origin: *const f32,
+    direction: *const f32,
+    t: *mut f32,
+    user_data: *mut std::ffi::c_void,
+    intersect: extern "C" fn(u32, *mut f32, *mut std::ffi::c_void) -> bool,
+) -> ResultCode {
+    let origin = Vec3::new(*origin, *origin.add(1), *origin.add(2));
+    let direction = Vec3::new(*direction, *direction.add(1), *direction.add(2));
+    if origin.is_nan() || direction.is_nan() {
+        return ResultCode::Nan;
+    }
+
+    let mut ray = Ray::new(origin, direction);
+    ray.t = *t;
+
+    let nodes = slice::from_raw_parts(bvh.nodes as *const BvhNode, bvh.node_count as usize);
+    let indices = slice::from_raw_parts(bvh.indices, bvh.index_count as usize);
+
+    let iter = BvhIndexIterator::from_slices(&mut ray, nodes, indices);
+    for (index, ray) in iter {
+        if intersect(index, &mut ray.t, user_data) {
+            break;
+        }
+    }
+
+    *t = ray.t;
+
+    ResultCode::Ok
+}
+
+/// # Safety
+///
+/// This function uses external function pointers which are unsafe.
+///
+/// origin_x must be a pointer to a 4-component float array
+/// origin_y must be a pointer to a 4-component float array
+/// origin_z must be a pointer to a 4-component float array
+/// direction_x must be a pointer to a 3-component float array
+/// direction_y must be a pointer to a 3-component float array
+/// direction_z must be a pointer to a 3-component float array
+/// user_data may be null
+/// intersect must not be null and is called for every potential primitive.
+/// intersect takes the following arguments:
+///     (in primitive_id, inout 4-wide t_value, user_data)
+/// if intersect returns true, the intersection loop will early out
+#[no_mangle]
+pub unsafe extern "C" fn intersect_packet(
+    bvh: RTBvh,
+    origin_x: *const f32,
+    origin_y: *const f32,
+    origin_z: *const f32,
+    direction_x: *const f32,
+    direction_y: *const f32,
+    direction_z: *const f32,
+    t: *mut f32,
+    user_data: *mut std::ffi::c_void,
+    intersect: extern "C" fn(u32, *mut f32, *mut std::ffi::c_void) -> bool,
+) -> ResultCode {
+    let origin_x = Vec4::new(
+        *origin_x,
+        *origin_x.add(1),
+        *origin_x.add(2),
+        *origin_x.add(3),
+    );
+    let origin_y = Vec4::new(
+        *origin_y,
+        *origin_y.add(1),
+        *origin_y.add(2),
+        *origin_y.add(3),
+    );
+    let origin_z = Vec4::new(
+        *origin_z,
+        *origin_z.add(1),
+        *origin_z.add(2),
+        *origin_z.add(3),
+    );
+    let direction_x = Vec4::new(
+        *direction_x,
+        *direction_x.add(1),
+        *direction_x.add(2),
+        *direction_x.add(3),
+    );
+    let direction_y = Vec4::new(
+        *direction_y,
+        *direction_y.add(1),
+        *direction_y.add(2),
+        *direction_y.add(3),
+    );
+    let direction_z = Vec4::new(
+        *direction_z,
+        *direction_z.add(1),
+        *direction_z.add(2),
+        *direction_z.add(3),
+    );
+
+    let t_value = Vec4::new(*t, *t.add(1), *t.add(2), *t.add(3));
+
+    if origin_x.is_nan()
+        || origin_y.is_nan()
+        || origin_z.is_nan()
+        || direction_x.is_nan()
+        || direction_y.is_nan()
+        || direction_z.is_nan()
+    {
+        return ResultCode::Nan;
+    }
+
+    let mut ray = RayPacket4 {
+        origin_x,
+        origin_y,
+        origin_z,
+        direction_x,
+        direction_y,
+        direction_z,
+        inv_direction_x: Vec4::ONE / direction_x,
+        inv_direction_y: Vec4::ONE / direction_y,
+        inv_direction_z: Vec4::ONE / direction_z,
+        t: t_value,
+    };
+
+    let nodes = slice::from_raw_parts(bvh.nodes as *const BvhNode, bvh.node_count as usize);
+    let indices = slice::from_raw_parts(bvh.indices, bvh.index_count as usize);
+
+    let iter = BvhPacketIndexIterator::from_slices(&mut ray, nodes, indices);
+    for (index, ray) in iter {
+        if intersect(index, &mut ray.t as *mut Vec4 as *mut f32, user_data) {
+            break;
+        }
+    }
+
+    std::ptr::copy_nonoverlapping(&ray.t as *const Vec4, t as *mut Vec4, 1);
+
+    ResultCode::Ok
+}
+
+/// # Safety
+///
+/// This function uses external function pointers which are unsafe.
+///
+/// origin must be a pointer to a 3-component float array
+/// direction must be a pointer to a 3-component float array
+/// user_data may be null
+/// intersect must not be null and is called for every potential primitive.
+/// intersect takes the following arguments:
+///     (in primitive_id, inout t_value, user_data)
+/// if intersect returns true, the intersection loop will early out
+#[no_mangle]
+pub unsafe extern "C" fn intersect_mbvh(
+    bvh: RTMbvh,
+    origin: *const f32,
+    direction: *const f32,
+    t: *mut f32,
+    user_data: *mut std::ffi::c_void,
+    intersect: extern "C" fn(u32, *mut f32, *mut std::ffi::c_void) -> bool,
+) -> ResultCode {
+    let origin = Vec3::new(*origin, *origin.add(1), *origin.add(2));
+    let direction = Vec3::new(*direction, *direction.add(1), *direction.add(2));
+
+    if origin.is_nan() || direction.is_nan() {
+        return ResultCode::Nan;
+    }
+
+    let mut ray = Ray::new(origin, direction);
+    ray.t = *t;
+
+    let nodes = slice::from_raw_parts(bvh.nodes as *const MbvhNode, bvh.node_count as usize);
+    let indices = slice::from_raw_parts(bvh.indices, bvh.index_count as usize);
+
+    let iter = MbvhIndexIterator::from_slices(&mut ray, nodes, indices);
+    for (index, ray) in iter {
+        if intersect(index, &mut ray.t, user_data) {
+            break;
+        }
+    }
+
+    *t = ray.t;
+
+    ResultCode::Ok
+}
+
+/// # Safety
+///
+/// This function uses external function pointers which are unsafe.
+///
+/// origin_x must be a pointer to a 4-component float array
+/// origin_y must be a pointer to a 4-component float array
+/// origin_z must be a pointer to a 4-component float array
+/// direction_x must be a pointer to a 3-component float array
+/// direction_y must be a pointer to a 3-component float array
+/// direction_z must be a pointer to a 3-component float array
+/// user_data may be null
+/// intersect must not be null and is called for every potential primitive.
+/// intersect takes the following arguments:
+///     (in primitive_id, inout 4-wide t_value, user_data)
+/// if intersect returns true, the intersection loop will early out
+#[no_mangle]
+pub unsafe extern "C" fn intersect_mbvh_packet(
+    bvh: RTMbvh,
+    origin_x: *const f32,
+    origin_y: *const f32,
+    origin_z: *const f32,
+    direction_x: *const f32,
+    direction_y: *const f32,
+    direction_z: *const f32,
+    t: *mut f32,
+    user_data: *mut std::ffi::c_void,
+    intersect: extern "C" fn(u32, *mut f32, *mut std::ffi::c_void) -> bool,
+) -> ResultCode {
+    let origin_x = Vec4::new(
+        *origin_x,
+        *origin_x.add(1),
+        *origin_x.add(2),
+        *origin_x.add(3),
+    );
+    let origin_y = Vec4::new(
+        *origin_y,
+        *origin_y.add(1),
+        *origin_y.add(2),
+        *origin_y.add(3),
+    );
+    let origin_z = Vec4::new(
+        *origin_z,
+        *origin_z.add(1),
+        *origin_z.add(2),
+        *origin_z.add(3),
+    );
+    let direction_x = Vec4::new(
+        *direction_x,
+        *direction_x.add(1),
+        *direction_x.add(2),
+        *direction_x.add(3),
+    );
+    let direction_y = Vec4::new(
+        *direction_y,
+        *direction_y.add(1),
+        *direction_y.add(2),
+        *direction_y.add(3),
+    );
+    let direction_z = Vec4::new(
+        *direction_z,
+        *direction_z.add(1),
+        *direction_z.add(2),
+        *direction_z.add(3),
+    );
+    let t_value = Vec4::new(*t, *t.add(1), *t.add(2), *t.add(3));
+
+    if origin_x.is_nan()
+        || origin_y.is_nan()
+        || origin_z.is_nan()
+        || direction_x.is_nan()
+        || direction_y.is_nan()
+        || direction_z.is_nan()
+    {
+        return ResultCode::Nan;
+    }
+
+    let mut ray = RayPacket4 {
+        origin_x,
+        origin_y,
+        origin_z,
+        direction_x,
+        direction_y,
+        direction_z,
+        inv_direction_x: Vec4::ONE / direction_x,
+        inv_direction_y: Vec4::ONE / direction_y,
+        inv_direction_z: Vec4::ONE / direction_z,
+        t: t_value,
+    };
+
+    let nodes = slice::from_raw_parts(bvh.nodes as *const MbvhNode, bvh.node_count as usize);
+    let indices = slice::from_raw_parts(bvh.indices, bvh.index_count as usize);
+
+    let iter = MbvhPacketIndexIterator::from_slices(&mut ray, nodes, indices);
+    for (index, ray) in iter {
+        if intersect(index, &mut ray.t as *mut Vec4 as *mut f32, user_data) {
+            break;
+        }
+    }
+
+    std::ptr::copy_nonoverlapping(&ray.t as *const Vec4, t as *mut Vec4, 1);
+
+    ResultCode::Ok
 }
 
 #[no_mangle]
@@ -642,5 +940,122 @@ mod tests {
 
         free_bvh(bvh);
         free_mbvh(mbvh);
+    }
+
+    #[test]
+    fn intersect() {
+        let vertices = vec![
+            vec3(-1.0, -1.0, 1.0),
+            vec3(1.0, -1.0, 1.0),
+            vec3(1.0, 1.0, 1.0),
+            vec3(-1.0, -1.0, 1.0),
+            vec3(1.0, 1.0, 1.0),
+            vec3(-1.0, 1.0, 1.0),
+        ];
+
+        let aabbs: Vec<Aabb> = (0..2)
+            .map(|i| {
+                let v0: Vec3 = vertices[i * 3];
+                let v1: Vec3 = vertices[i * 3 + 1];
+                let v2: Vec3 = vertices[i * 3 + 2];
+                aabb!(v0, v1, v2)
+            })
+            .collect();
+
+        let centers: Vec<Vec3> = aabbs.iter().map(|bb| bb.center()).collect();
+        let mut bvh = RTBvh::default();
+        let mut mbvh = RTMbvh::default();
+
+        assert_eq!(
+            unsafe {
+                create_bvh(
+                    aabbs.as_ptr() as *const RTAabb,
+                    2,
+                    centers.as_ptr() as *const f32,
+                    std::mem::size_of::<Vec3>() as _,
+                    1,
+                    crate::BvhType::BinnedSAH,
+                    &mut bvh,
+                )
+            },
+            ResultCode::Ok
+        );
+
+        assert_eq!(unsafe { create_mbvh(bvh, &mut mbvh,) }, ResultCode::Ok);
+
+        let origin = Vec3::ZERO;
+        let direction = Vec3::Z;
+        let mut t = 1e26_f32;
+        let mut user_data = UserData {
+            origin,
+            direction,
+            vertices: &vertices,
+        };
+
+        unsafe {
+            crate::intersect(
+                bvh,
+                &origin as *const Vec3 as *const f32,
+                &direction as *const Vec3 as *const f32,
+                &mut t,
+                &mut user_data as *mut UserData as *mut std::ffi::c_void,
+                intersect_test,
+            );
+        }
+        assert!((t - 1.0).abs() < f32::EPSILON);
+
+        t = 1e26_f32;
+        unsafe {
+            crate::intersect_mbvh(
+                mbvh,
+                &origin as *const Vec3 as *const f32,
+                &direction as *const Vec3 as *const f32,
+                &mut t,
+                &mut user_data as *mut UserData as *mut std::ffi::c_void,
+                intersect_test,
+            );
+        }
+        assert!((t - 1.0).abs() < f32::EPSILON);
+    }
+
+    struct UserData<'a> {
+        origin: Vec3,
+        direction: Vec3,
+        vertices: &'a [Vec3],
+    }
+
+    extern "C" fn intersect_test(id: u32, t: *mut f32, data: *mut std::ffi::c_void) -> bool {
+        let data = unsafe { &*(data as *const UserData) };
+
+        let v0 = data.vertices[id as usize * 3];
+        let v1 = data.vertices[id as usize * 3 + 1];
+        let v2 = data.vertices[id as usize * 3 + 2];
+
+        let edge1 = v1 - v0;
+        let edge2 = v2 - v0;
+        let h_val = data.direction.cross(edge2);
+        let a_val = edge1.dot(h_val);
+        if a_val > -1e-5 && a_val < 1e-5 {
+            return false;
+        }
+        let f_val = 1.0 / a_val;
+        let s_val = data.origin - v0.xyz();
+        let u_val = f_val * s_val.dot(h_val);
+        if !(0.0..=1.0).contains(&u_val) {
+            return false;
+        }
+        let q_val = s_val.cross(edge1);
+        let v_val = f_val * data.direction.dot(q_val);
+        if v_val < 0. || (u_val + v_val) > 1.0 {
+            return false;
+        }
+
+        let t_val: f32 = f_val * edge2.dot(q_val);
+        unsafe {
+            if t_val > 1e-5 && t_val < *t {
+                *t = t_val;
+            }
+        }
+        false
     }
 }

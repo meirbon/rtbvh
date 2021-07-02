@@ -263,12 +263,23 @@ impl Bvh {
         BvhIterator::new(ray, self, primitives)
     }
 
+    pub fn traverse_iter_indices<'a>(&'a self, ray: &'a mut Ray) -> BvhIndexIterator<'a> {
+        BvhIndexIterator::new(ray, self)
+    }
+
     pub fn traverse_iter_packet<'a, 'b, T: 'a + Primitive>(
         &'a self,
         ray: &'b mut RayPacket4,
         primitives: &'a [T],
     ) -> BvhPacketIterator<'a, 'b, T> {
         BvhPacketIterator::new(ray, self, primitives)
+    }
+
+    pub fn traverse_iter_indices_packet<'a>(
+        &'a self,
+        ray: &'a mut RayPacket4,
+    ) -> BvhPacketIndexIterator<'a> {
+        BvhPacketIndexIterator::new(ray, self)
     }
 }
 
@@ -280,11 +291,27 @@ impl<'a, 'b, T: 'a + Primitive> IntoRayIterator<'a, 'b, T> for Bvh {
     }
 }
 
+impl<'a> IntoRayIndexIterator<'a> for Bvh {
+    type RIterator = BvhIndexIterator<'a>;
+
+    fn iter(&'a self, ray: &'a mut Ray) -> Self::RIterator {
+        BvhIndexIterator::new(ray, self)
+    }
+}
+
 impl<'a, 'b, T: 'a + Primitive> IntoPacketIterator<'a, 'b, T> for Bvh {
     type RIterator = BvhPacketIterator<'a, 'b, T>;
 
     fn iter(&'a self, packet: &'b mut RayPacket4, primitives: &'a [T]) -> Self::RIterator {
         BvhPacketIterator::new(packet, self, primitives)
+    }
+}
+
+impl<'a> IntoPacketIndexIterator<'a> for Bvh {
+    type RIterator = BvhPacketIndexIterator<'a>;
+
+    fn iter(&'a self, packet: &'a mut RayPacket4) -> Self::RIterator {
+        BvhPacketIndexIterator::new(packet, self)
     }
 }
 
@@ -405,12 +432,23 @@ impl Mbvh {
         MbvhIterator::new(ray, self, primitives)
     }
 
+    pub fn traverse_iter_indices<'a>(&'a self, ray: &'a mut Ray) -> MbvhIndexIterator<'a> {
+        MbvhIndexIterator::new(ray, self)
+    }
+
     pub fn traverse_iter_packet<'a, 'b, T: Primitive>(
         &'a self,
         ray: &'b mut RayPacket4,
         primitives: &'a [T],
     ) -> MbvhPacketIterator<'a, 'b, T> {
         MbvhPacketIterator::new(ray, self, primitives)
+    }
+
+    pub fn traverse_iter_indices_packet<'a>(
+        &'a self,
+        ray: &'a mut RayPacket4,
+    ) -> MbvhPacketIndexIterator<'a> {
+        MbvhPacketIndexIterator::new(ray, self)
     }
 }
 
@@ -440,10 +478,26 @@ impl<'a, 'b, T: 'a + Primitive> IntoRayIterator<'a, 'b, T> for Mbvh {
     }
 }
 
+impl<'a> IntoRayIndexIterator<'a> for Mbvh {
+    type RIterator = MbvhIndexIterator<'a>;
+
+    fn iter(&'a self, ray: &'a mut Ray) -> Self::RIterator {
+        MbvhIndexIterator::new(ray, self)
+    }
+}
+
 impl<'a, 'b, T: 'a + Primitive> IntoPacketIterator<'a, 'b, T> for Mbvh {
     type RIterator = MbvhPacketIterator<'a, 'b, T>;
 
     fn iter(&'a self, packet: &'b mut RayPacket4, primitives: &'a [T]) -> Self::RIterator {
         MbvhPacketIterator::new(packet, self, primitives)
+    }
+}
+
+impl<'a> IntoPacketIndexIterator<'a> for Mbvh {
+    type RIterator = MbvhPacketIndexIterator<'a>;
+
+    fn iter(&'a self, packet: &'a mut RayPacket4) -> Self::RIterator {
+        MbvhPacketIndexIterator::new(packet, self)
     }
 }

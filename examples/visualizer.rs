@@ -3,6 +3,7 @@ use l3d::prelude::*;
 use pixels::{Pixels, SurfaceTexture};
 use rayon::prelude::*;
 use rtbvh::*;
+use shared::*;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::num::NonZeroUsize;
@@ -10,7 +11,6 @@ use std::path::PathBuf;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
-use shared::*;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 enum BvhToUse {
@@ -36,7 +36,6 @@ impl std::fmt::Display for BvhToUse {
         )
     }
 }
-
 
 const WIDTH: usize = 1280;
 const HEIGHT: usize = 720;
@@ -240,16 +239,17 @@ fn main() {
                             i *= 4;
                             let x = i as u32 % WIDTH as u32;
                             let y = i as u32 / WIDTH as u32;
-                            let mut packet =
-                                camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4], [0; 4]);
+                            let mut packet = camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4]);
 
                             let t_min = Vec4::splat(1e-4);
                             let mut triangles = [None; 4];
                             match bvh_to_use {
                                 BvhToUse::BvhPacket => {
-                                    for (triangle, packet) in
-                                        bvh.traverse_iter_packet(&mut packet, &primitives)
+                                    for (id, packet) in
+                                        bvh.traverse_iter_indices_packet(&mut packet)
                                     {
+                                        let triangle =
+                                            unsafe { primitives.get_unchecked(id as usize) };
                                         if let Some(result) = triangle.intersect4(packet, t_min) {
                                             for i in 0..4 {
                                                 if result[i] {
@@ -260,9 +260,11 @@ fn main() {
                                     }
                                 }
                                 BvhToUse::MbvhPacket => {
-                                    for (triangle, packet) in
-                                        mbvh.traverse_iter_packet(&mut packet, &primitives)
+                                    for (id, packet) in
+                                        mbvh.traverse_iter_indices_packet(&mut packet)
                                     {
+                                        let triangle =
+                                            unsafe { primitives.get_unchecked(id as usize) };
                                         if let Some(result) = triangle.intersect4(packet, t_min) {
                                             for i in 0..4 {
                                                 if result[i] {

@@ -58,11 +58,10 @@ pub struct RayPacket4 {
     pub inv_direction_z: Vec4,
 
     pub t: Vec4,
-    pub pixel_ids: UVec4,
 }
 
 impl RayPacket4 {
-    pub fn new(origins: [Vec4; 4], directions: [Vec4; 4], pixel_ids: [u32; 4]) -> RayPacket4 {
+    pub fn new(origins: [Vec4; 4], directions: [Vec4; 4]) -> RayPacket4 {
         Self {
             origin_x: vec4(origins[0].x, origins[1].x, origins[2].x, origins[3].x),
             origin_y: vec4(origins[0].y, origins[1].y, origins[2].y, origins[3].y),
@@ -104,7 +103,6 @@ impl RayPacket4 {
                 1.0 / directions[3].z,
             ),
             t: Vec4::splat(1e34),
-            pixel_ids: pixel_ids.into(),
         }
     }
 

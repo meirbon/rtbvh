@@ -137,7 +137,7 @@ fn main() {
             for x in (0..WIDTH).step_by(4) {
                 let x = x as u32;
                 let y = y as u32;
-                packets.push(camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4], [0; 4]));
+                packets.push(camera.generate_ray4([x, x + 1, x + 2, x + 3], [y; 4]));
             }
         }
     }

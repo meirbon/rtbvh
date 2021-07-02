@@ -422,10 +422,6 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         }
 
         let left_end = right_begin;
-        let right_begin = right_begin + left_split_count;
-        let right_end = right_end + left_split_count;
-
-        debug_assert!(right_end <= self.work_item.split_end);
 
         let left_item = WorkItem::new(
             new_nodes.left,
@@ -530,6 +526,10 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
                 .min((inv_size * (reference.aabb.min[axis] - min)).max(0.0) as usize);
             let last_bin = (bin_count - 1)
                 .min((inv_size * (reference.aabb.max[axis] - min)).max(0.0) as usize);
+
+            if !reference.aabb.is_valid() {
+                break;
+            }
 
             let mut current_aabb = reference.aabb;
             for (j, bin) in bins[first_bin..last_bin].iter_mut().enumerate() {

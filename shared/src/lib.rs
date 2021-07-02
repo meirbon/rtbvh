@@ -163,7 +163,7 @@ impl CameraView3D {
         Ray::new(self.pos, direction)
     }
 
-    pub fn generate_ray4(&self, x: [u32; 4], y: [u32; 4], ids: [u32; 4]) -> RayPacket4 {
+    pub fn generate_ray4(&self, x: [u32; 4], y: [u32; 4]) -> RayPacket4 {
         let x = [x[0] as f32, x[1] as f32, x[2] as f32, x[3] as f32];
         let y = [y[0] as f32, y[1] as f32, y[2] as f32, y[3] as f32];
 
@@ -213,7 +213,6 @@ impl CameraView3D {
             inv_direction_y: 1.0 / direction_y,
             inv_direction_z: 1.0 / direction_z,
             t: [1e34_f32; 4].into(),
-            pixel_ids: ids.into(),
         }
     }
 

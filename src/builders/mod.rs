@@ -1,4 +1,4 @@
-use crate::{BvhNode, Bvh};
+use crate::{Bvh, BvhNode};
 
 use crate::utils::UnsafeSliceWrapper;
 use std::sync::atomic::AtomicUsize;
@@ -59,6 +59,10 @@ impl<'a> AtomicNodeStack<'a> {
     pub fn allocate(&self) -> Option<AllocatedNodes<'a>> {
         let left = self.counter.fetch_add(2, SeqCst);
         let right = left + 1;
+
+        if self.nodes.len() <= left {
+            return None;
+        }
 
         let left_node = self.nodes.get_mut(left)?;
         let right_node = self.nodes.get_mut(right)?;

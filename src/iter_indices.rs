@@ -1,43 +1,35 @@
 use crate::*;
 
-pub trait RayIterator<'a, 'b, T: 'a + Primitive>: Iterator<Item = (&'a T, &'b mut Ray)> {}
-pub trait PacketIterator<'a, 'b, T: 'a + Primitive>:
-    Iterator<Item = (&'a T, &'b mut RayPacket4)>
-{
+pub trait RayIndexIterator<'a>: Iterator<Item = (u32, &'a mut Ray)> {}
+pub trait PacketIndexIterator<'a>: Iterator<Item = (u32, &'a mut RayPacket4)> {}
+
+pub trait IntoRayIndexIterator<'a> {
+    type RIterator: RayIndexIterator<'a>;
+
+    fn iter(&'a self, ray: &'a mut Ray) -> Self::RIterator;
 }
 
-pub trait IntoRayIterator<'a, 'b, T: 'a + Primitive> {
-    type RIterator: RayIterator<'a, 'b, T>;
+pub trait IntoPacketIndexIterator<'a> {
+    type RIterator: PacketIndexIterator<'a>;
 
-    fn iter(&'a self, ray: &'b mut Ray, primitives: &'a [T]) -> Self::RIterator;
-}
-
-pub trait IntoPacketIterator<'a, 'b, T: 'a + Primitive> {
-    type RIterator: PacketIterator<'a, 'b, T>;
-
-    fn iter(&'a self, packet: &'b mut RayPacket4, primitives: &'a [T]) -> Self::RIterator;
+    fn iter(&'a self, packet: &'a mut RayPacket4) -> Self::RIterator;
 }
 
 #[derive(Debug)]
-pub struct BvhIterator<'a, 'b, T: 'a + Primitive> {
-    ray: &'b mut Ray,
+pub struct BvhIndexIterator<'a> {
+    ray: &'a mut Ray,
     i: i32,
     stack: [i32; 32],
     stack_ptr: i32,
     nodes: &'a [BvhNode],
     indices: &'a [u32],
-    primitives: &'a [T],
 }
 
-impl<'a, 'b, T: 'a + Primitive> RayIterator<'a, 'b, T> for BvhIterator<'a, 'b, T> {}
+impl<'a> RayIndexIterator<'a> for BvhIndexIterator<'a> {}
 
-impl<'a, 'b, T: 'a + Primitive> BvhIterator<'a, 'b, T> {
-    pub fn new(ray: &'b mut Ray, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
-        let stack_ptr = if bvh.nodes.is_empty()
-            || ray.origin.is_nan()
-            || ray.direction.is_nan()
-            || primitives.is_empty()
-        {
+impl<'a> BvhIndexIterator<'a> {
+    pub fn new(ray: &'a mut Ray, bvh: &'a Bvh) -> Self {
+        let stack_ptr = if bvh.nodes.is_empty() || ray.origin.is_nan() || ray.direction.is_nan() {
             -1
         } else {
             0
@@ -48,23 +40,13 @@ impl<'a, 'b, T: 'a + Primitive> BvhIterator<'a, 'b, T> {
             i: 0,
             stack: [0; 32],
             stack_ptr,
-            nodes: bvh.nodes(),
-            indices: bvh.indices(),
-            primitives,
+            nodes: &bvh.nodes,
+            indices: &bvh.prim_indices,
         }
     }
 
-    pub fn from_slices(
-        ray: &'b mut Ray,
-        nodes: &'a [BvhNode],
-        indices: &'a [u32],
-        primitives: &'a [T],
-    ) -> Self {
-        let stack_ptr = if nodes.is_empty()
-            || ray.origin.is_nan()
-            || ray.direction.is_nan()
-            || primitives.is_empty()
-        {
+    pub fn from_slices(ray: &'a mut Ray, nodes: &'a [BvhNode], indices: &'a [u32]) -> Self {
+        let stack_ptr = if nodes.is_empty() || ray.origin.is_nan() || ray.direction.is_nan() {
             -1
         } else {
             0
@@ -77,13 +59,12 @@ impl<'a, 'b, T: 'a + Primitive> BvhIterator<'a, 'b, T> {
             stack_ptr,
             nodes,
             indices,
-            primitives,
         }
     }
 }
 
-impl<'a, 'b, T: 'a + Primitive> Iterator for BvhIterator<'a, 'b, T> {
-    type Item = (&'a T, &'b mut Ray);
+impl<'a> Iterator for BvhIndexIterator<'a> {
+    type Item = (u32, &'a mut Ray);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -106,11 +87,9 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for BvhIterator<'a, 'b, T> {
                         unsafe { *self.indices.get_unchecked((left_first + self.i) as usize) };
                     self.i += 1;
                     self.stack_ptr += 1;
-                    if let Some(prim) = self.primitives.get(prim_id as usize) {
-                        return Some((prim, unsafe {
-                            std::mem::transmute::<&mut Ray, &'b mut Ray>(self.ray)
-                        }));
-                    }
+                    return Some((prim_id, unsafe {
+                        std::mem::transmute::<&mut Ray, &'a mut Ray>(self.ray)
+                    }));
                 }
                 self.i = 0;
             } else if left_first > -1 {
@@ -128,20 +107,19 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for BvhIterator<'a, 'b, T> {
 }
 
 #[derive(Debug)]
-pub struct BvhPacketIterator<'a, 'b, T: 'a + Primitive> {
-    ray: &'b mut RayPacket4,
+pub struct BvhPacketIndexIterator<'a> {
+    ray: &'a mut RayPacket4,
     i: i32,
     stack: [i32; 32],
     stack_ptr: i32,
     nodes: &'a [BvhNode],
     indices: &'a [u32],
-    primitives: &'a [T],
 }
 
-impl<'a, 'b, T: 'a + Primitive> PacketIterator<'a, 'b, T> for BvhPacketIterator<'a, 'b, T> {}
+impl<'a> PacketIndexIterator<'a> for BvhPacketIndexIterator<'a> {}
 
-impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
-    pub fn new(ray: &'b mut RayPacket4, bvh: &'a Bvh, primitives: &'a [T]) -> Self {
+impl<'a> BvhPacketIndexIterator<'a> {
+    pub fn new(ray: &'a mut RayPacket4, bvh: &'a Bvh) -> Self {
         let stack_ptr = if bvh.nodes.is_empty()
             || ray.origin_x.is_nan()
             || ray.origin_y.is_nan()
@@ -149,7 +127,6 @@ impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
             || ray.direction_x.is_nan()
             || ray.direction_y.is_nan()
             || ray.direction_z.is_nan()
-            || primitives.is_empty()
         {
             -1
         } else {
@@ -160,18 +137,12 @@ impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
             i: 0,
             stack: [0; 32],
             stack_ptr,
-            nodes: bvh.nodes(),
-            indices: bvh.indices(),
-            primitives,
+            nodes: &bvh.nodes,
+            indices: &bvh.prim_indices,
         }
     }
 
-    pub fn from_slices(
-        ray: &'b mut RayPacket4,
-        nodes: &'a [BvhNode],
-        indices: &'a [u32],
-        primitives: &'a [T],
-    ) -> Self {
+    pub fn from_slices(ray: &'a mut RayPacket4, nodes: &'a [BvhNode], indices: &'a [u32]) -> Self {
         let stack_ptr = if nodes.is_empty()
             || ray.origin_x.is_nan()
             || ray.origin_y.is_nan()
@@ -179,7 +150,6 @@ impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
             || ray.direction_x.is_nan()
             || ray.direction_y.is_nan()
             || ray.direction_z.is_nan()
-            || primitives.is_empty()
         {
             -1
         } else {
@@ -192,13 +162,12 @@ impl<'a, 'b, T: 'a + Primitive> BvhPacketIterator<'a, 'b, T> {
             stack_ptr,
             nodes,
             indices,
-            primitives,
         }
     }
 }
 
-impl<'a, 'b, T: 'a + Primitive> Iterator for BvhPacketIterator<'a, 'b, T> {
-    type Item = (&'a T, &'b mut RayPacket4);
+impl<'a> Iterator for BvhPacketIndexIterator<'a> {
+    type Item = (u32, &'a mut RayPacket4);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -221,11 +190,9 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for BvhPacketIterator<'a, 'b, T> {
                         unsafe { *self.indices.get_unchecked((left_first + self.i) as usize) };
                     self.i += 1;
                     self.stack_ptr += 1;
-                    if let Some(prim) = self.primitives.get(prim_id as usize) {
-                        return Some((prim, unsafe {
-                            std::mem::transmute::<&mut RayPacket4, &'b mut RayPacket4>(self.ray)
-                        }));
-                    }
+                    return Some((prim_id, unsafe {
+                        std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(self.ray)
+                    }));
                 }
                 self.i = 0;
             } else if left_first > -1 {
@@ -243,8 +210,8 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for BvhPacketIterator<'a, 'b, T> {
 }
 
 #[derive(Debug)]
-pub struct MbvhIterator<'a, 'b, T: 'a + Primitive> {
-    ray: &'b mut Ray,
+pub struct MbvhIndexIterator<'a> {
+    ray: &'a mut Ray,
     hit: MbvhHit,
     current: i32,
     i: i32,
@@ -253,13 +220,12 @@ pub struct MbvhIterator<'a, 'b, T: 'a + Primitive> {
     stack_ptr: i32,
     indices: &'a [u32],
     nodes: &'a [MbvhNode],
-    primitives: &'a [T],
 }
 
-impl<'a, 'b, T: 'a + Primitive> RayIterator<'a, 'b, T> for MbvhIterator<'a, 'b, T> {}
+impl<'a> RayIndexIterator<'a> for MbvhIndexIterator<'a> {}
 
-impl<'a, 'b, T: Primitive> MbvhIterator<'a, 'b, T> {
-    pub fn new(ray: &'b mut Ray, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
+impl<'a> MbvhIndexIterator<'a> {
+    pub fn new(ray: &'a mut Ray, bvh: &'a Mbvh) -> Self {
         let hit = bvh
             .m_nodes
             .get(0)
@@ -275,16 +241,10 @@ impl<'a, 'b, T: Primitive> MbvhIterator<'a, 'b, T> {
             stack_ptr: -1,
             indices: &bvh.prim_indices,
             nodes: &bvh.m_nodes,
-            primitives,
         }
     }
 
-    pub fn from_slices(
-        ray: &'b mut Ray,
-        nodes: &'a [MbvhNode],
-        indices: &'a [u32],
-        primitives: &'a [T],
-    ) -> Self {
+    pub fn from_slices(ray: &'a mut Ray, nodes: &'a [MbvhNode], indices: &'a [u32]) -> Self {
         let hit = nodes.get(0).map(|n| n.intersect(&ray)).unwrap_or_default();
 
         Self {
@@ -297,13 +257,12 @@ impl<'a, 'b, T: Primitive> MbvhIterator<'a, 'b, T> {
             stack_ptr: -1,
             indices,
             nodes,
-            primitives,
         }
     }
 }
 
-impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhIterator<'a, 'b, T> {
-    type Item = (&'a T, &'b mut Ray);
+impl<'a> Iterator for MbvhIndexIterator<'a> {
+    type Item = (u32, &'a mut Ray);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -334,11 +293,10 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhIterator<'a, 'b, T> {
                                 *self.indices.get_unchecked((left_first + self.j) as usize)
                             };
                             self.j += 1;
-                            if let Some(prim) = self.primitives.get(prim_id as usize) {
-                                return Some((prim, unsafe {
-                                    std::mem::transmute::<&mut Ray, &'b mut Ray>(self.ray)
-                                }));
-                            }
+
+                            return Some((prim_id, unsafe {
+                                std::mem::transmute::<&mut Ray, &'a mut Ray>(self.ray)
+                            }));
                         }
                         self.j = 0;
                     } else if left_first > -1 {
@@ -355,8 +313,8 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhIterator<'a, 'b, T> {
 }
 
 #[derive(Debug)]
-pub struct MbvhPacketIterator<'a, 'b, T: 'a + Primitive> {
-    ray: &'b mut RayPacket4,
+pub struct MbvhPacketIndexIterator<'a> {
+    ray: &'a mut RayPacket4,
     hit: MbvhHit,
     current: i32,
     i: i32,
@@ -365,13 +323,12 @@ pub struct MbvhPacketIterator<'a, 'b, T: 'a + Primitive> {
     stack_ptr: i32,
     indices: &'a [u32],
     nodes: &'a [MbvhNode],
-    primitives: &'a [T],
 }
 
-impl<'a, 'b, T: 'a + Primitive> PacketIterator<'a, 'b, T> for MbvhPacketIterator<'a, 'b, T> {}
+impl<'a> PacketIndexIterator<'a> for MbvhPacketIndexIterator<'a> {}
 
-impl<'a, 'b, T: 'a + Primitive> MbvhPacketIterator<'a, 'b, T> {
-    pub fn new(ray: &'b mut RayPacket4, bvh: &'a Mbvh, primitives: &'a [T]) -> Self {
+impl<'a> MbvhPacketIndexIterator<'a> {
+    pub fn new(ray: &'a mut RayPacket4, bvh: &'a Mbvh) -> Self {
         let hit = bvh
             .m_nodes
             .get(0)
@@ -387,16 +344,10 @@ impl<'a, 'b, T: 'a + Primitive> MbvhPacketIterator<'a, 'b, T> {
             stack_ptr: -1,
             indices: &bvh.prim_indices,
             nodes: &bvh.m_nodes,
-            primitives,
         }
     }
 
-    pub fn from_slices(
-        ray: &'b mut RayPacket4,
-        nodes: &'a [MbvhNode],
-        indices: &'a [u32],
-        primitives: &'a [T],
-    ) -> Self {
+    pub fn from_slices(ray: &'a mut RayPacket4, nodes: &'a [MbvhNode], indices: &'a [u32]) -> Self {
         let hit = nodes.get(0).map(|n| n.intersect4(&ray)).unwrap_or_default();
 
         Self {
@@ -409,13 +360,12 @@ impl<'a, 'b, T: 'a + Primitive> MbvhPacketIterator<'a, 'b, T> {
             stack_ptr: -1,
             indices,
             nodes,
-            primitives,
         }
     }
 }
 
-impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhPacketIterator<'a, 'b, T> {
-    type Item = (&'a T, &'b mut RayPacket4);
+impl<'a> Iterator for MbvhPacketIndexIterator<'a> {
+    type Item = (u32, &'a mut RayPacket4);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -446,13 +396,9 @@ impl<'a, 'b, T: 'a + Primitive> Iterator for MbvhPacketIterator<'a, 'b, T> {
                                 *self.indices.get_unchecked((left_first + self.j) as usize)
                             };
                             self.j += 1;
-                            if let Some(prim) = self.primitives.get(prim_id as usize) {
-                                return Some((prim, unsafe {
-                                    std::mem::transmute::<&mut RayPacket4, &'b mut RayPacket4>(
-                                        self.ray,
-                                    )
-                                }));
-                            }
+                            return Some((prim_id, unsafe {
+                                std::mem::transmute::<&mut RayPacket4, &'a mut RayPacket4>(self.ray)
+                            }));
                         }
                         self.j = 0;
                     } else if left_first > -1 {
