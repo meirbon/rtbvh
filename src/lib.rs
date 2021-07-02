@@ -192,10 +192,13 @@ mod tests {
     }
 
     pub(crate) fn load_teapot() -> (Vec<Aabb<i32>>, Vec<Triangle>) {
-        use std::path::PathBuf;
         let loader = l3d::LoadInstance::new().with_default();
         let result = loader.load(LoadOptions {
-            path: PathBuf::from("objects").join("teapot.obj"),
+            source: LoadSource::String {
+                basedir: "",
+                extension: "obj",
+                source: include_str!("../objects/teapot.obj").as_bytes(),
+            },
             ..Default::default()
         });
 

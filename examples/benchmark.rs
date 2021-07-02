@@ -2,7 +2,6 @@ use glam::*;
 use l3d::prelude::*;
 use rayon::prelude::*;
 use rtbvh::*;
-use std::path::PathBuf;
 
 use shared::*;
 use std::num::NonZeroUsize;
@@ -22,7 +21,7 @@ fn intersect_rays<'a, 'b, B: IntoRayIterator<'a, 'b, Triangle> + Sync>(
     let rays = unsafe { std::mem::transmute::<&mut [Ray], &'b mut [Ray]>(rays.as_mut_slice()) };
 
     let timer = Timer::default();
-    let elapsed = if parallel {
+    if parallel {
         rays.par_chunks_mut(WIDTH).for_each(|chunk| {
             for ray in chunk {
                 for (triangle, ray) in bvh.iter(ray, triangles) {
@@ -30,17 +29,15 @@ fn intersect_rays<'a, 'b, B: IntoRayIterator<'a, 'b, Triangle> + Sync>(
                 }
             }
         });
-        timer.elapsed_in_millis()
     } else {
         for ray in rays.iter_mut() {
             for (triangle, ray) in bvh.iter(ray, triangles) {
                 let _result = triangle.intersect(ray);
             }
         }
-        timer.elapsed_in_millis()
-    };
+    }
 
-    elapsed
+    timer.elapsed_in_millis()
 }
 
 fn intersect_packets<'a, 'b, B: IntoPacketIterator<'a, 'b, Triangle> + Sync>(
@@ -54,7 +51,7 @@ fn intersect_packets<'a, 'b, B: IntoPacketIterator<'a, 'b, Triangle> + Sync>(
     };
 
     let timer = Timer::default();
-    let elapsed = if parallel {
+    if parallel {
         rays.par_chunks_mut(WIDTH).for_each(|chunk| {
             for ray in chunk {
                 for (triangle, ray) in bvh.iter(ray, triangles) {
@@ -62,17 +59,15 @@ fn intersect_packets<'a, 'b, B: IntoPacketIterator<'a, 'b, Triangle> + Sync>(
                 }
             }
         });
-        timer.elapsed_in_millis()
     } else {
         for ray in rays.iter_mut() {
             for (triangle, ray) in bvh.iter(ray, triangles) {
                 let _result = triangle.intersect4(ray, Vec4::splat(1e-4));
             }
         }
-        timer.elapsed_in_millis()
-    };
+    }
 
-    elapsed
+    timer.elapsed_in_millis()
 }
 
 fn main() {
@@ -104,7 +99,11 @@ fn main() {
 
     let loader = l3d::LoadInstance::new().with_default();
     let result = loader.load(LoadOptions {
-        path: PathBuf::from("objects/teapot.obj"),
+        source: LoadSource::String {
+            basedir: "",
+            extension: "obj",
+            source: include_str!("../objects/teapot.obj").as_bytes(),
+        },
         ..Default::default()
     });
 
@@ -240,7 +239,8 @@ fn main() {
         primitives: primitives.as_slice(),
         primitives_per_leaf: PRIMS_PER_LEAF,
     }
-    .construct_binned_sah().unwrap();
+    .construct_binned_sah()
+    .unwrap();
 
     println!(
         "Bvh construction with binned sah type of {} primitives took {} ms",
@@ -339,7 +339,7 @@ fn main() {
                 (*ray.origin.as_ref()).into(),
                 (*ray.direction.as_ref()).into(),
             );
-    
+
             for triangle in bvh.traverse_iterator(&r, &primitives) {
                 let _result = triangle.intersect(ray);
             }

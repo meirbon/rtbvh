@@ -7,7 +7,6 @@ use shared::*;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -43,7 +42,11 @@ const HEIGHT: usize = 720;
 fn main() {
     let loader = LoadInstance::new().with_default();
     let result = loader.load(LoadOptions {
-        path: PathBuf::from("objects/teapot.obj"),
+        source: LoadSource::String {
+            basedir: "",
+            extension: "obj",
+            source: include_str!("../objects/teapot.obj").as_bytes(),
+        },
         ..Default::default()
     });
 

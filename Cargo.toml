@@ -1,6 +1,6 @@
 [package]
 name = "rtbvh"
-version = "0.5.5"
+version = "0.6.0"
 authors = ["Mèir Noordermeer <meirnoordermeer@me.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -21,11 +21,11 @@ num = "0.4"
 default = []
 
 [dev-dependencies]
-l3d = "0.1"
+l3d = "0.2.1"
 rayon = "1.5"
 bvh = "0.5"
 winit = "0.25.0"
-pixels = "0.3.0"
+pixels = "0.4.0"
 shared = { path = "shared" }
 
 [profile.release]
