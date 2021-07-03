@@ -460,13 +460,19 @@ impl From<Bvh> for Mbvh {
 
 impl Bounds<i32> for Bvh {
     fn bounds(&self) -> Aabb {
-        self.nodes[0].bounds
+        self.nodes
+            .get(0)
+            .map(|node| node.bounds)
+            .unwrap_or_default()
     }
 }
 
 impl Bounds<i32> for Mbvh {
     fn bounds(&self) -> Aabb {
-        self.nodes[0].bounds
+        self.nodes
+            .get(0)
+            .map(|node| node.bounds)
+            .unwrap_or_default()
     }
 }
 
