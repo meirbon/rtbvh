@@ -379,31 +379,22 @@ impl Mbvh {
     }
 
     pub fn construct(bvh: &Bvh) -> Self {
-        debug_assert!(!bvh.nodes.is_empty());
+        if bvh.nodes.is_empty() {
+            return Mbvh::default();
+        }
+
         let mut m_nodes = vec![MbvhNode::new(); bvh.nodes.len()];
         let mut pool_ptr = 1;
 
-        if bvh.nodes.len() <= 4 {
-            for (i, node) in bvh.nodes.iter().enumerate() {
-                m_nodes[0].set_bounds_bb(i, &node.bounds);
-                m_nodes[0].children[i] = node.get_left_first_unchecked();
-                m_nodes[0].counts[i] = node.get_count_unchecked();
-            }
-
-            return Mbvh {
-                nodes: bvh.nodes.clone(),
-                m_nodes,
-                prim_indices: bvh.prim_indices.clone(),
-            };
-        }
-
-        MbvhNode::merge_nodes(
+        MbvhNode::merge_nodes_2(
             0,
             0,
             bvh.nodes.as_slice(),
             m_nodes.as_mut_slice(),
             &mut pool_ptr,
         );
+
+        m_nodes.resize(pool_ptr, Default::default());
 
         Mbvh {
             nodes: bvh.nodes.clone(),

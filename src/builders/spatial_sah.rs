@@ -435,7 +435,7 @@ impl<'a, T: Primitive<i32> + SpatialTriangle> SpatialSahBuildTask<'a, T> {
         let right_item = WorkItem::new(
             new_nodes.right,
             right_begin,
-            right_end,
+            right_end ,
             self.work_item.split_end,
             self.work_item.depth + 1,
             is_sorted,

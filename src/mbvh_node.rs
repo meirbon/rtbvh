@@ -46,8 +46,8 @@ impl std::default::Default for MbvhNode {
             max_y: [0.0; 4],
             min_z: [0.0; 4],
             max_z: [0.0; 4],
-            children: [0; 4],
-            counts: [0; 4],
+            children: [-1; 4],
+            counts: [-1; 4],
         }
     }
 }
@@ -294,7 +294,6 @@ impl MbvhNode {
         MbvhHit { ids, result }
     }
 
-    #[inline(always)]
     pub fn merge_nodes(
         m_index: usize,
         cur_node: usize,
@@ -302,43 +301,160 @@ impl MbvhNode {
         mbvh_pool: &mut [MbvhNode],
         pool_ptr: &mut usize,
     ) {
-        let cur_node = &bvh_pool[cur_node];
-        if cur_node.is_leaf() {
-            mbvh_pool[m_index].children[0] = cur_node.get_left_first_unchecked();
-            mbvh_pool[m_index].counts[0] = cur_node.get_count_unchecked();
-            for i in 1..4 {
-                mbvh_pool[m_index].children[i] = -1;
-                mbvh_pool[m_index].counts[i] = -1;
-            }
-            return;
-        } else if m_index >= mbvh_pool.len() {
-            panic!("Index {} is out of bounds!", m_index);
+        for i in 0..4 {
+            mbvh_pool[m_index].set_bounds_bb(i, &bvh_pool[cur_node].bounds);
         }
 
-        let num_children = mbvh_pool[m_index].merge_node(cur_node, bvh_pool);
+        // cur_node is the parent node.
+        // We want to merge its children's children such that we have 4 nodes for a new mbvhnode
+        let (nodes, leafs) = if let Some(left_first) = bvh_pool[cur_node].get_left_first() {
+            let left_node = left_first;
+            let right_node = left_first + 1;
 
-        for idx in 0..num_children {
-            if mbvh_pool[m_index].children[idx] < 0 {
-                mbvh_pool[m_index].set_bounds(idx, &[1e34; 3], &[-1e34; 3]);
-                mbvh_pool[m_index].children[idx] = 0;
-                mbvh_pool[m_index].counts[idx] = 0;
+            let mut nodes = [-1; 4];
+            let mut leafs = [-1; 4];
+
+            if let Some(left_node) = bvh_pool.get(left_node as usize) {
+                if let Some(left_first) = left_node.get_left_first() {
+                    if left_node.is_leaf() {
+                        nodes[0] = left_first as i32;
+                        leafs[0] = left_node.get_count_unchecked();
+                    } else {
+                        if bvh_pool[left_first as usize].is_leaf() {
+                            nodes[0] = bvh_pool[left_first as usize].get_left_first_unchecked();
+                            leafs[0] = bvh_pool[left_first as usize].get_count_unchecked();
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(0, &bvh_pool[left_first as usize].bounds);
+                        } else {
+                            nodes[0] = left_first as i32;
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(0, &bvh_pool[left_first as usize].bounds);
+                        }
+
+                        if bvh_pool[left_first as usize + 1].is_leaf() {
+                            nodes[1] = bvh_pool[left_first as usize + 1].get_left_first_unchecked();
+                            leafs[1] = bvh_pool[left_first as usize + 1].get_count_unchecked();
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(1, &bvh_pool[left_first as usize + 1].bounds);
+                        } else {
+                            nodes[1] = left_first as i32 + 1;
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(1, &bvh_pool[left_first as usize + 1].bounds);
+                        }
+                    }
+                }
+            }
+
+            if let Some(right_node) = bvh_pool.get(right_node as usize) {
+                if let Some(left_first) = right_node.get_left_first() {
+                    if right_node.is_leaf() {
+                        nodes[2] = left_first as i32;
+                        leafs[2] = right_node.get_count_unchecked();
+                    } else {
+                        if bvh_pool[left_first as usize].is_leaf() {
+                            nodes[2] = bvh_pool[left_first as usize].get_left_first_unchecked();
+                            leafs[2] = bvh_pool[left_first as usize].get_count_unchecked();
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(2, &bvh_pool[left_first as usize].bounds);
+                        } else {
+                            nodes[2] = left_first as i32;
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(2, &bvh_pool[left_first as usize].bounds);
+                        }
+
+                        if bvh_pool[left_first as usize + 1].is_leaf() {
+                            nodes[3] = bvh_pool[left_first as usize + 1].get_left_first_unchecked();
+                            leafs[3] = bvh_pool[left_first as usize + 1].get_count_unchecked();
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(3, &bvh_pool[left_first as usize + 1].bounds);
+                        } else {
+                            nodes[3] = left_first as i32 + 1;
+                            mbvh_pool[m_index]
+                                .set_bounds_bb(3, &bvh_pool[left_first as usize + 1].bounds);
+                        }
+                    }
+                }
+            }
+
+            (nodes, leafs)
+        } else {
+            ([-1; 4], [-1; 4])
+        };
+
+        for i in 0..4 {
+            let node = nodes[i];
+            let count = leafs[i];
+
+            if node >= 0 && count >= 0 {
+                // Leaf
+                mbvh_pool[m_index].children[i] = node;
+                mbvh_pool[m_index].counts[i] = count;
+                continue;
+            } else if node == -1 {
+                // Invalid node
                 continue;
             }
 
-            if mbvh_pool[m_index].counts[idx] < 0 {
-                let cur_node = mbvh_pool[m_index].children[idx] as usize;
-                if !bvh_pool[cur_node].is_leaf() {
-                    let new_idx = *pool_ptr;
-                    *pool_ptr += 1;
-                    mbvh_pool[m_index].children[idx] = new_idx as i32;
-                    Self::merge_nodes(new_idx, cur_node, bvh_pool, mbvh_pool, pool_ptr);
-                } else {
-                    mbvh_pool[m_index].counts[idx] = 0;
-                    mbvh_pool[m_index].children[idx] = 0;
-                }
+            // If the node we're adding is a leaf, we might as well just merge into this mnode
+            if bvh_pool[node as usize].is_leaf() {
+                mbvh_pool[m_index].children[i] = bvh_pool[node as usize].get_left_first_unchecked();
+                mbvh_pool[m_index].counts[i] = bvh_pool[node as usize].get_count_unchecked();
+                mbvh_pool[m_index].set_bounds_bb(i, &bvh_pool[node as usize].bounds);
+            } else {
+                let new_m_index = *pool_ptr;
+                *pool_ptr += 1;
+                mbvh_pool[m_index].children[i] = new_m_index as i32;
+                mbvh_pool[m_index].set_bounds_bb(i, &bvh_pool[node as usize].bounds);
+                Self::merge_nodes_2(new_m_index, node as usize, bvh_pool, mbvh_pool, pool_ptr);
             }
         }
     }
+    //
+    // #[inline(always)]
+    // pub fn merge_nodes(
+    //     m_index: usize,
+    //     cur_node: usize,
+    //     bvh_pool: &[BvhNode],
+    //     mbvh_pool: &mut [MbvhNode],
+    //     pool_ptr: &mut usize,
+    // ) {
+    //     let cur_node = &bvh_pool[cur_node];
+    //     if cur_node.is_leaf() {
+    //         mbvh_pool[m_index].children[0] = cur_node.get_left_first_unchecked();
+    //         mbvh_pool[m_index].counts[0] = cur_node.get_count_unchecked();
+    //         for i in 1..4 {
+    //             mbvh_pool[m_index].children[i] = -1;
+    //             mbvh_pool[m_index].counts[i] = -1;
+    //         }
+    //         return;
+    //     } else if m_index >= mbvh_pool.len() {
+    //         panic!("Index {} is out of bounds!", m_index);
+    //     }
+    //
+    //     let num_children = mbvh_pool[m_index].merge_node(cur_node, bvh_pool);
+    //
+    //     for idx in 0..num_children {
+    //         if mbvh_pool[m_index].children[idx] < 0 {
+    //             mbvh_pool[m_index].set_bounds(idx, &[1e34; 3], &[-1e34; 3]);
+    //             mbvh_pool[m_index].children[idx] = 0;
+    //             mbvh_pool[m_index].counts[idx] = 0;
+    //             continue;
+    //         }
+    //
+    //         if mbvh_pool[m_index].counts[idx] < 0 {
+    //             let cur_node = mbvh_pool[m_index].children[idx] as usize;
+    //             if !bvh_pool[cur_node].is_leaf() {
+    //                 let new_idx = *pool_ptr;
+    //                 *pool_ptr += 1;
+    //                 mbvh_pool[m_index].children[idx] = new_idx as i32;
+    //                 Self::merge_nodes(new_idx, cur_node, bvh_pool, mbvh_pool, pool_ptr);
+    //             } else {
+    //                 mbvh_pool[m_index].counts[idx] = 0;
+    //                 mbvh_pool[m_index].children[idx] = 0;
+    //             }
+    //         }
+    //     }
+    // }
 
     fn merge_node(&mut self, node: &BvhNode, pool: &[BvhNode]) -> usize {
         self.children = [-1; 4];

@@ -285,28 +285,28 @@ mod tests {
             let _mbvh = Mbvh::from(bvh);
         }
 
-        for i in 1..=10 {
-            let bvh = (Builder {
-                aabbs: None,
-                primitives: triangles.as_slice(),
-                primitives_per_leaf: NonZeroUsize::new(i),
-            })
-            .construct_spatial_sah()
-            .unwrap_or_default();
-
-            let _mbvh = Mbvh::from(bvh);
-        }
-
-        for i in 1..=10 {
-            let bvh = (Builder {
-                aabbs: None,
-                primitives: triangles.as_slice(),
-                primitives_per_leaf: NonZeroUsize::new(i),
-            })
-            .construct_locally_ordered_clustered()
-            .unwrap_or_default();
-
-            let _mbvh = Mbvh::from(bvh);
-        }
+        // for i in 1..=10 {
+        //     let bvh = (Builder {
+        //         aabbs: None,
+        //         primitives: triangles.as_slice(),
+        //         primitives_per_leaf: NonZeroUsize::new(i),
+        //     })
+        //     .construct_spatial_sah()
+        //     .unwrap_or_default();
+        //
+        //     let _mbvh = Mbvh::from(bvh);
+        // }
+        //
+        // for i in 1..=10 {
+        //     let bvh = (Builder {
+        //         aabbs: None,
+        //         primitives: triangles.as_slice(),
+        //         primitives_per_leaf: NonZeroUsize::new(i),
+        //     })
+        //     .construct_locally_ordered_clustered()
+        //     .unwrap_or_default();
+        //
+        //     let _mbvh = Mbvh::from(bvh);
+        // }
     }
 }
