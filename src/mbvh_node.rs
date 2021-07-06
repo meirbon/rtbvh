@@ -405,7 +405,7 @@ impl MbvhNode {
                 *pool_ptr += 1;
                 mbvh_pool[m_index].children[i] = new_m_index as i32;
                 mbvh_pool[m_index].set_bounds_bb(i, &bvh_pool[node as usize].bounds);
-                Self::merge_nodes_2(new_m_index, node as usize, bvh_pool, mbvh_pool, pool_ptr);
+                Self::merge_nodes(new_m_index, node as usize, bvh_pool, mbvh_pool, pool_ptr);
             }
         }
     }
@@ -456,167 +456,167 @@ impl MbvhNode {
     //     }
     // }
 
-    fn merge_node(&mut self, node: &BvhNode, pool: &[BvhNode]) -> usize {
-        self.children = [-1; 4];
-        self.counts = [-1; 4];
-        let mut num_children = 0;
-
-        let left_first = node.get_left_first();
-        if left_first.is_none() {
-            return num_children;
-        }
-
-        let left_first = left_first.unwrap();
-        let left_node = &pool[left_first as usize];
-        let right_node = &pool[(left_first + 1) as usize];
-
-        if left_node.is_leaf() {
-            let idx = num_children;
-            if let Some(left_first) = left_node.get_left_first() {
-                num_children += 1;
-                self.children[idx] = left_first as i32;
-                self.counts[idx] = left_node.get_count_unchecked();
-                self.set_bounds_bb(idx, &left_node.bounds);
-            }
-        } else {
-            // Node has children
-
-            if let Some(left) = left_node.get_left_first() {
-                let right = left + 1;
-
-                let left_node = &pool[left as usize];
-                let right_node = &pool[right as usize];
-
-                if let Some(left_first) = left_node.get_left_first() {
-                    let idx1 = num_children;
-                    num_children += 1;
-                    self.set_bounds_bb(idx1, &left_node.bounds);
-                    if left_node.is_leaf() {
-                        self.children[idx1] = left_first as i32;
-                        self.counts[idx1] = left_node.get_count_unchecked();
-                    } else {
-                        self.children[idx1] = left as i32;
-                        self.counts[idx1] = -1;
-                    }
-                }
-
-                if let Some(left_first) = right_node.get_left_first() {
-                    let idx2 = num_children;
-                    num_children += 1;
-                    self.set_bounds_bb(idx2, &right_node.bounds);
-                    if right_node.is_leaf() {
-                        self.children[idx2] = left_first as i32;
-                        self.counts[idx2] = right_node.get_count_unchecked();
-                    } else {
-                        self.children[idx2] = right as i32;
-                        self.counts[idx2] = -1;
-                    }
-                }
-            }
-        }
-
-        if let Some(left_first) = right_node.get_left_first() {
-            if right_node.is_leaf() {
-                // Node only has a single child
-                let idx = num_children;
-                num_children += 1;
-                self.set_bounds_bb(idx, &right_node.bounds);
-
-                self.children[idx] = left_first as i32;
-                self.counts[idx] = right_node.get_count_unchecked();
-            } else if let Some(left) = right_node.get_left_first() {
-                let right = left + 1;
-                let left_node = &pool[left as usize];
-                let right_node = &pool[right as usize];
-
-                if let Some(left_first) = left_node.get_left_first() {
-                    let idx1 = num_children;
-                    num_children += 1;
-                    self.set_bounds_bb(idx1, &left_node.bounds);
-                    if left_node.is_leaf() {
-                        self.children[idx1] = left_first as i32;
-                        self.counts[idx1] = left_node.get_count_unchecked();
-                    } else {
-                        self.children[idx1] = left as i32;
-                        self.counts[idx1] = -1;
-                    }
-                }
-
-                if let Some(left_first) = right_node.get_left_first() {
-                    let idx2 = num_children;
-                    num_children += 1;
-                    self.set_bounds_bb(idx2, &right_node.bounds);
-                    if right_node.is_leaf() {
-                        self.children[idx2] = left_first as i32;
-                        self.counts[idx2] = right_node.get_count_unchecked();
-                    } else {
-                        self.children[idx2] = right as i32;
-                        self.counts[idx2] = -1;
-                    }
-                }
-            }
-        }
-
-        // In case this quad node isn't filled & not all nodes are leaf nodes, merge 1 more node
-        let mut merged = true;
-        while num_children < 4 {
-            if !merged {
-                break;
-            }
-            merged = false;
-
-            for i in 0..3 {
-                if self.counts[i] >= 0 {
-                    continue;
-                }
-
-                if self.children[i] < 0 {
-                    continue;
-                }
-
-                let left = self.children[i];
-                let right = left + 1;
-                let left_sub_node = &pool[left as usize];
-                let right_sub_node = &pool[right as usize];
-
-                if let Some(left_first) = left_sub_node.get_left_first() {
-                    // Overwrite current node
-                    self.set_bounds_bb(i, &left_sub_node.bounds);
-                    if left_sub_node.is_leaf() {
-                        self.children[i] = left_first as i32;
-                        self.counts[i] = left_sub_node.get_count_unchecked();
-                    } else {
-                        self.children[i] = left;
-                        self.counts[i] = -1;
-                    }
-
-                    // Add its right node
-                    self.set_bounds_bb(num_children, &right_sub_node.bounds);
-                    if right_sub_node.is_leaf() {
-                        self.children[num_children] = right_sub_node.get_left_first_unchecked();
-                        self.counts[num_children] = right_sub_node.get_count_unchecked();
-                    } else {
-                        self.children[num_children] = right;
-                        self.counts[num_children] = -1;
-                    }
-
-                    num_children += 1;
-                    merged = true;
-                } else if let Some(left_first) = right_sub_node.get_left_first() {
-                    if right_sub_node.is_leaf() {
-                        self.children[i] = left_first as i32;
-                        self.counts[i] = right_sub_node.get_count_unchecked();
-                    } else {
-                        self.children[i] = right;
-                        self.counts[i] = -1;
-                    }
-                    merged = true;
-                }
-
-                break;
-            }
-        }
-
-        num_children
-    }
+    // fn merge_node(&mut self, node: &BvhNode, pool: &[BvhNode]) -> usize {
+    //     self.children = [-1; 4];
+    //     self.counts = [-1; 4];
+    //     let mut num_children = 0;
+    //
+    //     let left_first = node.get_left_first();
+    //     if left_first.is_none() {
+    //         return num_children;
+    //     }
+    //
+    //     let left_first = left_first.unwrap();
+    //     let left_node = &pool[left_first as usize];
+    //     let right_node = &pool[(left_first + 1) as usize];
+    //
+    //     if left_node.is_leaf() {
+    //         let idx = num_children;
+    //         if let Some(left_first) = left_node.get_left_first() {
+    //             num_children += 1;
+    //             self.children[idx] = left_first as i32;
+    //             self.counts[idx] = left_node.get_count_unchecked();
+    //             self.set_bounds_bb(idx, &left_node.bounds);
+    //         }
+    //     } else {
+    //         // Node has children
+    //
+    //         if let Some(left) = left_node.get_left_first() {
+    //             let right = left + 1;
+    //
+    //             let left_node = &pool[left as usize];
+    //             let right_node = &pool[right as usize];
+    //
+    //             if let Some(left_first) = left_node.get_left_first() {
+    //                 let idx1 = num_children;
+    //                 num_children += 1;
+    //                 self.set_bounds_bb(idx1, &left_node.bounds);
+    //                 if left_node.is_leaf() {
+    //                     self.children[idx1] = left_first as i32;
+    //                     self.counts[idx1] = left_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[idx1] = left as i32;
+    //                     self.counts[idx1] = -1;
+    //                 }
+    //             }
+    //
+    //             if let Some(left_first) = right_node.get_left_first() {
+    //                 let idx2 = num_children;
+    //                 num_children += 1;
+    //                 self.set_bounds_bb(idx2, &right_node.bounds);
+    //                 if right_node.is_leaf() {
+    //                     self.children[idx2] = left_first as i32;
+    //                     self.counts[idx2] = right_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[idx2] = right as i32;
+    //                     self.counts[idx2] = -1;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //
+    //     if let Some(left_first) = right_node.get_left_first() {
+    //         if right_node.is_leaf() {
+    //             // Node only has a single child
+    //             let idx = num_children;
+    //             num_children += 1;
+    //             self.set_bounds_bb(idx, &right_node.bounds);
+    //
+    //             self.children[idx] = left_first as i32;
+    //             self.counts[idx] = right_node.get_count_unchecked();
+    //         } else if let Some(left) = right_node.get_left_first() {
+    //             let right = left + 1;
+    //             let left_node = &pool[left as usize];
+    //             let right_node = &pool[right as usize];
+    //
+    //             if let Some(left_first) = left_node.get_left_first() {
+    //                 let idx1 = num_children;
+    //                 num_children += 1;
+    //                 self.set_bounds_bb(idx1, &left_node.bounds);
+    //                 if left_node.is_leaf() {
+    //                     self.children[idx1] = left_first as i32;
+    //                     self.counts[idx1] = left_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[idx1] = left as i32;
+    //                     self.counts[idx1] = -1;
+    //                 }
+    //             }
+    //
+    //             if let Some(left_first) = right_node.get_left_first() {
+    //                 let idx2 = num_children;
+    //                 num_children += 1;
+    //                 self.set_bounds_bb(idx2, &right_node.bounds);
+    //                 if right_node.is_leaf() {
+    //                     self.children[idx2] = left_first as i32;
+    //                     self.counts[idx2] = right_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[idx2] = right as i32;
+    //                     self.counts[idx2] = -1;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //
+    //     // In case this quad node isn't filled & not all nodes are leaf nodes, merge 1 more node
+    //     let mut merged = true;
+    //     while num_children < 4 {
+    //         if !merged {
+    //             break;
+    //         }
+    //         merged = false;
+    //
+    //         for i in 0..3 {
+    //             if self.counts[i] >= 0 {
+    //                 continue;
+    //             }
+    //
+    //             if self.children[i] < 0 {
+    //                 continue;
+    //             }
+    //
+    //             let left = self.children[i];
+    //             let right = left + 1;
+    //             let left_sub_node = &pool[left as usize];
+    //             let right_sub_node = &pool[right as usize];
+    //
+    //             if let Some(left_first) = left_sub_node.get_left_first() {
+    //                 // Overwrite current node
+    //                 self.set_bounds_bb(i, &left_sub_node.bounds);
+    //                 if left_sub_node.is_leaf() {
+    //                     self.children[i] = left_first as i32;
+    //                     self.counts[i] = left_sub_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[i] = left;
+    //                     self.counts[i] = -1;
+    //                 }
+    //
+    //                 // Add its right node
+    //                 self.set_bounds_bb(num_children, &right_sub_node.bounds);
+    //                 if right_sub_node.is_leaf() {
+    //                     self.children[num_children] = right_sub_node.get_left_first_unchecked();
+    //                     self.counts[num_children] = right_sub_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[num_children] = right;
+    //                     self.counts[num_children] = -1;
+    //                 }
+    //
+    //                 num_children += 1;
+    //                 merged = true;
+    //             } else if let Some(left_first) = right_sub_node.get_left_first() {
+    //                 if right_sub_node.is_leaf() {
+    //                     self.children[i] = left_first as i32;
+    //                     self.counts[i] = right_sub_node.get_count_unchecked();
+    //                 } else {
+    //                     self.children[i] = right;
+    //                     self.counts[i] = -1;
+    //                 }
+    //                 merged = true;
+    //             }
+    //
+    //             break;
+    //         }
+    //     }
+    //
+    //     num_children
+    // }
 }

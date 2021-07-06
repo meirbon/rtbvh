@@ -386,7 +386,7 @@ impl Mbvh {
         let mut m_nodes = vec![MbvhNode::new(); bvh.nodes.len()];
         let mut pool_ptr = 1;
 
-        MbvhNode::merge_nodes_2(
+        MbvhNode::merge_nodes(
             0,
             0,
             bvh.nodes.as_slice(),
